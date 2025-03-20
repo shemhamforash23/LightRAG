@@ -2019,6 +2019,7 @@ class LightRAG:
                     description = edge_data.get("description", "")
                     keywords = edge_data.get("keywords", "")
                     source_id = edge_data.get("source_id", "")
+                    file_path = edge_data.get("file_path", "unkown_source")
                     weight = float(edge_data.get("weight", 1.0))
 
                     # Create new content for embedding
@@ -2036,6 +2037,7 @@ class LightRAG:
                             "source_id": source_id,
                             "description": description,
                             "keywords": keywords,
+                            "file_path": file_path,
                             "weight": weight,
                         }
                     }
@@ -2054,6 +2056,7 @@ class LightRAG:
             # 3. Recalculate entity's vector representation and update vector database
             description = new_node_data.get("description", "")
             source_id = new_node_data.get("source_id", "")
+            file_path = new_node_data.get("file_path", "unkown_source")
             entity_type = new_node_data.get("entity_type", "")
             content = entity_name + "\n" + description
 
@@ -2068,6 +2071,7 @@ class LightRAG:
                     "source_id": source_id,
                     "description": description,
                     "entity_type": entity_type,
+                    "file_path": file_path,
                 }
             }
 
@@ -2162,6 +2166,7 @@ class LightRAG:
             description = new_edge_data.get("description", "")
             keywords = new_edge_data.get("keywords", "")
             source_id = new_edge_data.get("source_id", "")
+            file_path = new_edge_data.get("file_path", "unkown_source")
             weight = float(new_edge_data.get("weight", 1.0))
 
             # Create content for embedding
@@ -2182,6 +2187,7 @@ class LightRAG:
                     "description": description,
                     "keywords": keywords,
                     "weight": weight,
+                    "file_path": file_path,
                 }
             }
 
@@ -2261,6 +2267,7 @@ class LightRAG:
                 "entity_type": entity_data.get("entity_type", "UNKNOWN"),
                 "description": entity_data.get("description", ""),
                 "source_id": entity_data.get("source_id", "manual"),
+                "file_path": entity_data.get("file_path", "unkown_source"),
             }
 
             # Add entity to knowledge graph
@@ -2269,6 +2276,7 @@ class LightRAG:
             # Prepare content for entity
             description = node_data.get("description", "")
             source_id = node_data.get("source_id", "")
+            file_path = node_data.get("file_path", "unkown_source")
             entity_type = node_data.get("entity_type", "")
             content = entity_name + "\n" + description
 
@@ -2283,6 +2291,7 @@ class LightRAG:
                     "source_id": source_id,
                     "description": description,
                     "entity_type": entity_type,
+                    "file_path": file_path,
                 }
             }
 
@@ -2357,6 +2366,7 @@ class LightRAG:
                 "description": relation_data.get("description", ""),
                 "keywords": relation_data.get("keywords", ""),
                 "source_id": relation_data.get("source_id", "manual"),
+                "file_path": relation_data.get("file_path", "unkown_source"),
                 "weight": float(relation_data.get("weight", 1.0)),
             }
 
@@ -2369,6 +2379,7 @@ class LightRAG:
             description = edge_data.get("description", "")
             keywords = edge_data.get("keywords", "")
             source_id = edge_data.get("source_id", "")
+            file_path = edge_data.get("file_path", "unkown_source")
             weight = edge_data.get("weight", 1.0)
 
             # Create content for embedding
@@ -2389,6 +2400,7 @@ class LightRAG:
                     "description": description,
                     "keywords": keywords,
                     "weight": weight,
+                    "file_path": file_path,
                 }
             }
 
@@ -2463,6 +2475,7 @@ class LightRAG:
                 "description": "concatenate",
                 "entity_type": "keep_first",
                 "source_id": "join_unique",
+                "file_path": "join_unique",
             }
 
             merge_strategy = (
@@ -2566,6 +2579,7 @@ class LightRAG:
                             "description": "concatenate",
                             "keywords": "join_unique",
                             "source_id": "join_unique",
+                            "file_path": "join_unique",
                             "weight": "max",
                         },
                     )
@@ -2598,6 +2612,7 @@ class LightRAG:
             # 7. Update entity vector representation
             description = merged_entity_data.get("description", "")
             source_id = merged_entity_data.get("source_id", "")
+            file_path = merged_entity_data.get("file_path", "unkown_source")
             entity_type = merged_entity_data.get("entity_type", "")
             content = target_entity + "\n" + description
 
@@ -2609,6 +2624,7 @@ class LightRAG:
                     "source_id": source_id,
                     "description": description,
                     "entity_type": entity_type,
+                    "file_path": file_path,
                 }
             }
 
@@ -2623,6 +2639,7 @@ class LightRAG:
                 description = edge_data.get("description", "")
                 keywords = edge_data.get("keywords", "")
                 source_id = edge_data.get("source_id", "")
+                file_path = edge_data.get("file_path", "unkown_source")
                 weight = float(edge_data.get("weight", 1.0))
 
                 content = f"{keywords}\t{src}\n{tgt}\n{description}"
@@ -2637,6 +2654,7 @@ class LightRAG:
                         "description": description,
                         "keywords": keywords,
                         "weight": weight,
+                        "file_path": file_path,
                     }
                 }
 

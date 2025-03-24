@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from typing import Callable, Any
+from typing import Callable, Any, List, Dict, Optional, Tuple
 from pydantic import BaseModel, Field
+import asyncio
+import numpy as np
+
+from .base import BaseKVStorage, BaseVectorStorage, BaseGraphStorage
+from .utils import logger, compute_mdhash_id, handle_cache, save_to_cache, CacheData
 
 
 class Model(BaseModel):
@@ -87,6 +92,32 @@ class MultiModel:
         )
 
         return await next_model.gen_func(**args)
+
+
+class MultiModalProcessor:
+    def __init__(
+        self,
+        modal_caption_func,  # 多模态内容生成caption的函数
+        text_chunks_db: BaseKVStorage,
+        chunks_vdb: BaseVectorStorage,
+        entities_vdb: BaseVectorStorage,
+        relationships_vdb: BaseVectorStorage,
+        knowledge_graph_inst: BaseGraphStorage,
+        embedding_func,
+        llm_model_func,
+        global_config: dict,
+        hashing_kv: Optional[BaseKVStorage] = None,
+    ):
+        self.modal_caption_func = modal_caption_func
+        self.text_chunks_db = text_chunks_db
+        self.chunks_vdb = chunks_vdb
+        self.entities_vdb = entities_vdb
+        self.relationships_vdb = relationships_vdb
+        self.knowledge_graph_inst = knowledge_graph_inst
+        self.embedding_func = embedding_func
+        self.llm_model_func = llm_model_func
+        self.global_config = global_config
+        self.hashing_kv = hashing_kv
 
 
 if __name__ == "__main__":

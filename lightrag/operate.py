@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 import os
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, List, Dict, Optional, Tuple
 from collections import Counter, defaultdict
 
 from .utils import (
@@ -2060,3 +2060,214 @@ async def query_with_keywords(
         )
     else:
         raise ValueError(f"Unknown mode {param.mode}")
+
+
+async def process_multimodal_content(
+    self,
+    modal_content,  # 多模态内容（图像、视频等）
+    content_type: str,  # 内容类型，如"image", "video"等
+    top_k: int = 10,
+    better_than_threshold: float = 0.6,
+) -> Tuple[List[str], Dict[str, Any]]:
+    """处理多模态内容并生成知识图谱实体和关系"""
+    
+    # 1. 生成初始caption
+    initial_caption = await self._generate_initial_caption(modal_content, content_type)
+    logger.info(f"初始caption生成: {initial_caption}")
+    
+    # 2. 检索相关文本块
+    related_chunks = await self._retrieve_related_chunks(initial_caption, top_k, better_than_threshold)
+    
+    # 3. 生成增强caption
+    enhanced_caption = await self._generate_enhanced_caption(initial_caption, related_chunks)
+    logger.info(f"增强caption生成: {enhanced_caption}")
+    
+    # 4. 提取实体
+    entities = await self._extract_entities(enhanced_caption)
+    
+    # 5. 建立实体关系
+    relationships = await self._build_relationships(entities, enhanced_caption)
+    
+    # 6. 更新知识图谱
+    await self._update_knowledge_graph(entities, relationships)
+    
+    return enhanced_caption, {"entities": entities, "relationships": relationships}
+
+
+async def _generate_initial_caption(self, modal_content, content_type: str) -> str:
+    """使用模态特定LLM生成初始caption"""
+    # 缓存处理
+    content_hash = compute_mdhash_id(str(modal_content))
+    args_hash = f"modal_caption_{content_hash}"
+    
+    cached_result, quantized, min_val, max_val = await handle_cache(
+        self.hashing_kv, args_hash, str(content_type), mode="modal_caption", cache_type="modal"
+    )
+    
+    if cached_result:
+        return cached_result
+    
+    # 生成caption
+    caption = await self.modal_caption_func(modal_content, content_type)
+    
+    # 保存缓存
+    if self.hashing_kv:
+        await save_to_cache(
+            self.hashing_kv,
+            CacheData(
+                args_hash=args_hash,
+                content=caption,
+                prompt=str(content_type),
+                quantized=quantized,
+                min_val=min_val,
+                max_val=max_val,
+                mode="modal_caption",
+                cache_type="modal",
+            ),
+        )
+    
+    return caption
+
+
+async def _retrieve_related_chunks(self, caption: str, top_k: int, better_than_threshold: float) -> List[Dict[str, Any]]:
+    """根据caption检索相关文本块"""
+    # 使用向量数据库检索相关文本块
+    chunk_ids = await self.chunks_vdb.search(
+        caption, top_k=top_k, better_than_threshold=better_than_threshold
+    )
+    
+    # 获取文本块内容
+    chunks_data = await self.text_chunks_db.get_by_ids(chunk_ids)
+    return [chunks_data[chunk_id] for chunk_id in chunk_ids if chunk_id in chunks_data]
+
+
+async def _generate_enhanced_caption(self, initial_caption: str, related_chunks: List[Dict[str, Any]]) -> str:
+    """结合原始文本和初始caption生成增强caption"""
+    # 构建提示
+    chunks_text = "\n\n".join([chunk["content"] for chunk in related_chunks])
+    prompt = f"""请根据以下信息生成一个详细的描述：
+    
+初始描述：
+{initial_caption}
+
+相关文本内容：
+{chunks_text}
+
+请生成一个更加详细、准确的描述，结合初始描述和相关文本内容。描述应该包含关键实体、关系和重要细节。"""
+
+    # 使用LLM生成增强caption
+    enhanced_caption = await self.llm_model_func(prompt)
+    return enhanced_caption
+
+
+async def _extract_entities(self, enhanced_caption: str) -> List[Dict[str, Any]]:
+    """从增强caption中提取实体"""
+    # 构建提示
+    entity_types = self.global_config.get("addon_params", {}).get(
+        "entity_types", ["organization", "person", "geo", "event"]
+    )
+    entity_types_str = ", ".join(entity_types)
+    
+    prompt = f"""请从以下描述中提取实体信息：
+
+描述：
+{enhanced_caption}
+
+请提取以下类型的实体：{entity_types_str}
+
+对于每个实体，请提供：
+1. 实体名称
+2. 实体类型（从上述类型中选择）
+3. 实体描述（详细说明该实体的特征和重要性）
+
+以JSON格式返回结果：
+[
+  {{
+    "entity_name": "实体名称",
+    "entity_type": "实体类型",
+    "description": "实体描述"
+  }}
+]"""
+
+    # 使用LLM提取实体
+    entities_json = await self.llm_model_func(prompt)
+    
+    # 解析JSON结果
+    try:
+        import json
+        entities = json.loads(entities_json)
+        return entities
+    except Exception as e:
+        logger.error(f"解析实体JSON失败: {e}")
+        return []
+
+async def _build_relationships(self, entities: List[Dict[str, Any]], enhanced_caption: str) -> List[Dict[str, Any]]:
+    """建立实体间关系"""
+    if len(entities) <= 1:
+        return []
+    
+    # 构建提示
+    entity_names = [entity["entity_name"] for entity in entities]
+    entity_names_str = ", ".join(entity_names)
+    
+    prompt = f"""请分析以下实体之间的关系：
+
+实体列表：{entity_names_str}
+
+描述内容：
+{enhanced_caption}
+
+对于每对可能存在关系的实体，请提供：
+1. 源实体名称
+2. 目标实体名称
+3. 关系描述（详细说明两个实体之间的关系）
+4. 关系关键词（概括关系的核心概念）
+5. 关系强度（0.0到1.0之间的数值，表示关系的强度）
+
+仅在确实存在明确关系的实体之间建立关系。
+以JSON格式返回结果：
+[
+  {{
+    "source": "源实体名称",
+    "target": "目标实体名称",
+    "description": "关系描述",
+    "keywords": "关系关键词",
+    "weight": 0.8
+  }}
+]"""
+
+    # 使用LLM建立关系
+    relationships_json = await self.llm_model_func(prompt)
+    
+    # 解析JSON结果
+    try:
+        import json
+        relationships = json.loads(relationships_json)
+        return relationships
+    except Exception as e:
+        logger.error(f"解析关系JSON失败: {e}")
+        return []
+
+async def _update_knowledge_graph(self, entities: List[Dict[str, Any]], relationships: List[Dict[str, Any]]):
+    """更新知识图谱"""
+    # 生成唯一ID作为来源ID
+    source_id = compute_mdhash_id(str(entities) + str(relationships))
+    
+    # 添加实体
+    for entity in entities:
+        node_data = {
+            "entity_type": entity["entity_type"],
+            "description": entity["description"],
+            "source_id": source_id
+        }
+        await self.knowledge_graph_inst.upsert_node(entity["entity_name"], node_data)
+    
+    # 添加关系
+    for relation in relationships:
+        edge_data = {
+            "weight": relation["weight"],
+            "keywords": relation["keywords"],
+            "description": relation["description"],
+            "source_id": source_id
+        }
+        await self.knowledge_graph_inst.upsert_edge(relation["source"], relation["target"], edge_data)

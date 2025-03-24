@@ -53,6 +53,7 @@ from .utils import (
     logger,
 )
 from .types import KnowledgeGraph
+from .llm import MultiModalProcessor
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -3139,4 +3140,27 @@ class LightRAG:
                     self.chunk_entity_relation_graph,
                 ]
             ]
+        )
+
+    # 在LightRAG类中添加多模态处理方法
+    async def process_multimodal(self, modal_content, content_type: str, **kwargs):
+        """处理多模态内容并更新知识图谱"""
+        processor = MultiModalProcessor(
+            modal_caption_func=self.modal_caption_func,  # 需要在LightRAG初始化时提供
+            text_chunks_db=self.text_chunks_db,
+            chunks_vdb=self.chunks_vdb,
+            entities_vdb=self.entities_vdb,
+            relationships_vdb=self.relationships_vdb,
+            knowledge_graph_inst=self.knowledge_graph_inst,
+            embedding_func=self.embedding_func,
+            llm_model_func=self.llm_model_func,
+            global_config=self.global_config,
+            hashing_kv=self.hashing_kv,
+        )
+        
+        return await processor.process_multimodal_content(
+            modal_content,
+            content_type,
+            top_k=kwargs.get("top_k", 10),
+            better_than_threshold=kwargs.get("better_than_threshold", 0.6),
         )

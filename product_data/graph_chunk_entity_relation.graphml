@@ -1,0 +1,325 @@
+<?xml version='1.0' encoding='utf-8'?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
+  <key id="d9" for="edge" attr.name="file_path" attr.type="string" />
+  <key id="d8" for="edge" attr.name="source_id" attr.type="string" />
+  <key id="d7" for="edge" attr.name="keywords" attr.type="string" />
+  <key id="d6" for="edge" attr.name="description" attr.type="string" />
+  <key id="d5" for="edge" attr.name="weight" attr.type="double" />
+  <key id="d4" for="node" attr.name="file_path" attr.type="string" />
+  <key id="d3" for="node" attr.name="source_id" attr.type="string" />
+  <key id="d2" for="node" attr.name="description" attr.type="string" />
+  <key id="d1" for="node" attr.name="entity_type" attr.type="string" />
+  <key id="d0" for="node" attr.name="entity_id" attr.type="string" />
+  <graph edgedefault="undirected">
+    <node id="Our Company">
+      <data key="d0">Our Company</data>
+      <data key="d1">organization</data>
+      <data key="d2">Our Company offers a range of electronic products and accessories, catering to both professionals and everyday users.&lt;SEP&gt;Our Company offers a wide range of electronic products and accessories designed for professionals and everyday users alike.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="Laptop Pro">
+      <data key="d0">Laptop Pro</data>
+      <data key="d1">category</data>
+      <data key="d2">Laptop Pro is a high-performance laptop featuring the latest processor technology, 16GB RAM, and a 512GB SSD.&lt;SEP&gt;Laptop Pro is a high-performance laptop featuring the latest processor technology, designed for professional needs.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="Ultra HD Monitor">
+      <data key="d0">Ultra HD Monitor</data>
+      <data key="d1">category</data>
+      <data key="d2">Ultra HD Monitor is designed for graphic designers and video editors, providing exceptional color accuracy and resolution.&lt;SEP&gt;Ultra HD Monitor provides exceptional color accuracy and resolution, aimed at graphic designers and video editors.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="Wireless Mouse">
+      <data key="d0">Wireless Mouse</data>
+      <data key="d1">category</data>
+      <data key="d2">Wireless Mouse offers precise tracking and long battery life, enhancing the computing experience.&lt;SEP&gt;Wireless Mouse offers precise tracking, long battery life, and enhances the overall computing experience.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="Ergonomic Keyboard">
+      <data key="d0">Ergonomic Keyboard</data>
+      <data key="d1">category</data>
+      <data key="d2">Ergonomic Keyboard is designed to reduce wrist strain for users during extended work sessions.&lt;SEP&gt;Ergonomic Keyboard is designed to reduce wrist strain, making it ideal for users during extended work sessions.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="USB-C Dock">
+      <data key="d0">USB-C Dock</data>
+      <data key="d1">category</data>
+      <data key="d2">USB-C Dock expands connectivity options for devices with multiple ports.&lt;SEP&gt;USB-C Dock provides multiple connectivity options for devices, expanding usability and convenience.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="Smart Watch">
+      <data key="d0">Smart Watch</data>
+      <data key="d1">category</data>
+      <data key="d2">Smart Watch combines style and functionality, including health tracking and notifications for users.&lt;SEP&gt;Smart Watch combines style with health tracking functionality, offering notifications and long battery life.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="Bluetooth Speaker">
+      <data key="d0">Bluetooth Speaker</data>
+      <data key="d1">category</data>
+      <data key="d2">Bluetooth Speaker delivers rich sound with 10 hours of battery life and water resistance for outdoor use.&lt;SEP&gt;Bluetooth Speaker delivers rich sound, is water-resistant, and has a battery life of up to 10 hours, making it suitable for outdoor use.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="External SSD">
+      <data key="d0">External SSD</data>
+      <data key="d1">category</data>
+      <data key="d2">External SSD offers 1TB of portable storage with fast transfer speeds, enabling effective file backup and device capacity expansion.&lt;SEP&gt;External SSD provides 1TB of portable storage with fast transfer speeds, suitable for backing up files.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="Electronics Category">
+      <data key="d0">Electronics Category</data>
+      <data key="d1">category</data>
+      <data key="d2">Electronics category comprises various electronic devices including laptops and monitors with modern specifications.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="Electronics">
+      <data key="d0">Electronics</data>
+      <data key="d1">category</data>
+      <data key="d2">Electronics is a category that includes various electronic products such as laptops, monitors, and other peripherals.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="Accessories">
+      <data key="d0">Accessories</data>
+      <data key="d1">category</data>
+      <data key="d2">Accessories enhance the computing experience and productivity, including devices like keyboards, mice, and docks.</data>
+      <data key="d3">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d4">unknown_source</data>
+    </node>
+    <node id="table_41a6f0d1">
+      <data key="d1">TABLE</data>
+      <data key="d2">The product catalog presents a comprehensive list of electronic products and accessories meticulously categorized by their type, providing an organized view of available items for sale. The table format enhances user experience by clearly displaying essential details, including the Product ID, Product Name, Category, Price, and Stock levels, allowing customers to easily assess pricing and inventory availability.
+
+### Product Categories
+
+1. **Electronics**
+   - This category showcases high-performance devices tailored for both professionals and everyday users. Notable products include the **Laptop Pro**, which is equipped with cutting-edge processor technology, 16GB of RAM, and a 512GB SSD. This makes it an ideal choice for professionals needing robust computing power for demanding applications. Additionally, the **Ultra HD Monitor** stands out with its exceptional color accuracy and resolution, catering specifically to graphic designers and video editors who require precise visual details in their work.
+
+2. **Accessories**
+   - To complement the electronic offerings, a curated selection of accessories is available to enhance the computing experience. These include:
+     - The **Wireless Mouse**, designed for precise tracking with the convenience of long battery life.
+     - The **Ergonomic Keyboard**, engineered to reduce wrist strain during prolonged use, ensuring comfort for users engaged in extensive typing tasks.
+     - The **USB-C Dock**, which significantly expands connectivity options by providing multiple ports for devices, thereby increasing versatility for users.
+
+3. **Wearables**
+   - The catalog features a sophisticated collection of **Smart Watches** that blend style with practicality. These devices offer functionality such as health tracking, notifications, and impressive battery longevity, making them suitable for users who value convenience and fitness monitoring.
+
+4. **Audio**
+   - For audio enthusiasts, the **Bluetooth Speaker** delivers an immersive listening experience, featuring rich, room-filling sound. It offers up to 10 hours of battery life and is designed with water resistance, making it ideal for outdoor activities.
+
+5. **Storage**
+   - The **External SSD** provides a robust solution for those needing additional storage, offering 1TB of portable space with rapid transfer speeds, perfect for backing up critical files or expanding device capacity.
+
+### Inventory Management and Product Warranty
+
+The company maintains an efficient inventory management system, updating stock levels on a weekly basis. Restocking is initiated for items when inventory falls below 20 units, ensuring a consistent supply of products for customers. Warranty information varies by category; electronic products generally come with a 12-month warranty, providing consumers with added peace of mind regarding their investment, while accessories are supported with a 6-month warranty.
+
+In summary, this product catalog encapsulates a diverse array of high-quality electronic products and accessories, enhancing user experience through well-organized information and comprehensive details set forth in an easily digestible format. Whether for professional applications, everyday tasks, or personal leisure, the products listed cater to a broad audience, emphasizing functionality, performance, and user comfort.</data>
+      <data key="d3">41a6f0d15287a29517dfc3efc20fc410</data>
+      <data key="d4">multimodal_content</data>
+    </node>
+    <edge source="Our Company" target="Electronics Category">
+      <data key="d5">9.0</data>
+      <data key="d6">Our Company offers a wide range of products under the Electronics category, targeting various user needs.</data>
+      <data key="d7">product offering, category management</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Our Company" target="Electronics">
+      <data key="d5">9.0</data>
+      <data key="d6">Our Company provides a diverse range of products in the Electronics category for both professionals and everyday consumers.</data>
+      <data key="d7">product offering, market focus</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Our Company" target="table_41a6f0d1">
+      <data key="d5">0.9</data>
+      <data key="d7">product offerings, business entity</data>
+      <data key="d6">The product catalog overview provides a comprehensive listing of products that are a core part of the offerings made by Our Company, connecting the catalog to the broader business entity responsible for these products.</data>
+      <data key="d8">41a6f0d15287a29517dfc3efc20fc410</data>
+    </edge>
+    <edge source="Laptop Pro" target="Electronics Category">
+      <data key="d5">8.0</data>
+      <data key="d6">Laptop Pro is a product included in the Electronics category, designed for high-performance needs.</data>
+      <data key="d7">product classification, performance focus</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Laptop Pro" target="Electronics">
+      <data key="d5">8.0</data>
+      <data key="d6">Laptop Pro is a product within the Electronics category, specifically designed for high-performance use.</data>
+      <data key="d7">product classification, performance</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Laptop Pro" target="table_41a6f0d1">
+      <data key="d5">0.85</data>
+      <data key="d7">high-performance laptop, product catalog</data>
+      <data key="d6">The product catalog highlights the Laptop Pro, which is a specific product listed in the existing entities, establishing a direct relationship between the catalog and the individual product.</data>
+      <data key="d8">41a6f0d15287a29517dfc3efc20fc410</data>
+    </edge>
+    <edge source="Ultra HD Monitor" target="Electronics Category">
+      <data key="d5">8.0</data>
+      <data key="d6">Ultra HD Monitor belongs to the Electronics category, serving graphic designers and video editors.</data>
+      <data key="d7">product classification, target audience</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Ultra HD Monitor" target="Electronics">
+      <data key="d5">8.0</data>
+      <data key="d6">Ultra HD Monitor is included in the Electronics category, targeting graphic designers and video editors.</data>
+      <data key="d7">product classification, target market</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Ultra HD Monitor" target="table_41a6f0d1">
+      <data key="d5">0.85</data>
+      <data key="d7">monitor, product catalog</data>
+      <data key="d6">The catalog features the Ultra HD Monitor, aligning it with the existing entity that provides details about this specific product, thus forming a connection between them.</data>
+      <data key="d8">41a6f0d15287a29517dfc3efc20fc410</data>
+    </edge>
+    <edge source="Wireless Mouse" target="Electronics Category">
+      <data key="d5">8.0</data>
+      <data key="d6">Wireless Mouse is a part of the Electronics category, enhancing user experience in computing.</data>
+      <data key="d7">product classification, user enhancement</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Wireless Mouse" target="Electronics">
+      <data key="d5">8.0</data>
+      <data key="d6">Wireless Mouse is part of the broader Electronics category, enhancing user interaction with devices.</data>
+      <data key="d7">product classification, user enhancement</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Wireless Mouse" target="Accessories">
+      <data key="d5">7.0</data>
+      <data key="d6">Wireless Mouse is considered an accessory that enhances computing, falling under the Accessories category.</data>
+      <data key="d7">product classification, user enhancement</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Wireless Mouse" target="table_41a6f0d1">
+      <data key="d5">0.75</data>
+      <data key="d7">mouse, product catalog</data>
+      <data key="d6">The catalog includes the Wireless Mouse, which is referenced in the existing entity, creating a relationship between the product listing and the specific mouse product.</data>
+      <data key="d8">41a6f0d15287a29517dfc3efc20fc410</data>
+    </edge>
+    <edge source="Ergonomic Keyboard" target="Electronics Category">
+      <data key="d5">8.0</data>
+      <data key="d6">Ergonomic Keyboard falls under the Electronics category, focusing on comfort during use.</data>
+      <data key="d7">product classification, ergonomic focus</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Ergonomic Keyboard" target="Electronics">
+      <data key="d5">8.0</data>
+      <data key="d6">Ergonomic Keyboard is classified under Electronics, focusing on user comfort and experience.</data>
+      <data key="d7">product classification, ergonomic design</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Ergonomic Keyboard" target="Accessories">
+      <data key="d5">7.0</data>
+      <data key="d6">Ergonomic Keyboard is regarded as an accessory that improves user comfort during prolonged computer use.</data>
+      <data key="d7">product classification, ergonomic design</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="USB-C Dock" target="Electronics Category">
+      <data key="d5">8.0</data>
+      <data key="d6">USB-C Dock is offered in the Electronics category to expand connectivity options.</data>
+      <data key="d7">product classification, connectivity enhancement</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="USB-C Dock" target="Electronics">
+      <data key="d5">8.0</data>
+      <data key="d6">USB-C Dock falls under the Electronics category, allowing users to connect multiple devices with ease.</data>
+      <data key="d7">product classification, connectivity</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="USB-C Dock" target="table_41a6f0d1">
+      <data key="d5">0.75</data>
+      <data key="d7">dock, product catalog</data>
+      <data key="d6">The product catalog mentions the USB-C Dock, linking it to the existing entity that details this accessory, thereby establishing a clear relationship between them.</data>
+      <data key="d8">41a6f0d15287a29517dfc3efc20fc410</data>
+    </edge>
+    <edge source="Smart Watch" target="Electronics Category">
+      <data key="d5">8.0</data>
+      <data key="d6">Smart Watch is featured in the Electronics category, combining functionality with style.</data>
+      <data key="d7">product classification, dual function</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Smart Watch" target="Electronics">
+      <data key="d5">8.0</data>
+      <data key="d6">Smart Watch is featured in the Electronics category, offering a combination of style and practical health features.</data>
+      <data key="d7">product classification, smart technology</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Smart Watch" target="table_41a6f0d1">
+      <data key="d5">0.7</data>
+      <data key="d7">wearables, product catalog</data>
+      <data key="d6">The catalog features a Smart Watch collection, relating it to the existing Smart Watch entity that describes the functions and features, creating a connection between product offerings.</data>
+      <data key="d8">41a6f0d15287a29517dfc3efc20fc410</data>
+    </edge>
+    <edge source="Bluetooth Speaker" target="Electronics Category">
+      <data key="d5">8.0</data>
+      <data key="d6">Bluetooth Speaker is included in the Electronics category, designed for outdoor use and sound quality.</data>
+      <data key="d7">product classification, audio offering</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="Bluetooth Speaker" target="Electronics">
+      <data key="d5">8.0</data>
+      <data key="d6">Bluetooth Speaker is listed under the Electronics category, emphasizing portability and sound quality.</data>
+      <data key="d7">product classification, audio quality</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="External SSD" target="Electronics Category">
+      <data key="d5">8.0</data>
+      <data key="d6">External SSD is categorized under Electronics, providing portable storage solutions.</data>
+      <data key="d7">product classification, storage solution</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="External SSD" target="Electronics">
+      <data key="d5">8.0</data>
+      <data key="d6">External SSD is categorized in Electronics, providing portable storage solutions for users.</data>
+      <data key="d7">product classification, storage solutions</data>
+      <data key="d8">chunk-92fb6f81820f7cc324ddfb2d3462e776</data>
+      <data key="d9">unknown_source</data>
+    </edge>
+    <edge source="External SSD" target="table_41a6f0d1">
+      <data key="d5">0.8</data>
+      <data key="d7">storage, product catalog</data>
+      <data key="d6">The External SSD is included in the product catalog, which correlates with the existing entity that elaborates on this storage solution, thus forming a direct link.</data>
+      <data key="d8">41a6f0d15287a29517dfc3efc20fc410</data>
+    </edge>
+    <edge source="Electronics Category" target="table_41a6f0d1">
+      <data key="d5">0.8</data>
+      <data key="d7">electronic products, product catalog</data>
+      <data key="d6">The catalog includes an extensive section on electronic products, which directly relates to the existing Electronics Category entity, as it encompasses the detailed product offerings within this category.</data>
+      <data key="d8">41a6f0d15287a29517dfc3efc20fc410</data>
+    </edge>
+    <edge source="Accessories" target="table_41a6f0d1">
+      <data key="d5">0.8</data>
+      <data key="d7">accessories, product catalog</data>
+      <data key="d6">The catalog features a range of accessories that enhance user productivity, directly aligning with the existing Accessories entity, which describes similar products.</data>
+      <data key="d8">41a6f0d15287a29517dfc3efc20fc410</data>
+    </edge>
+  </graph>
+</graphml>

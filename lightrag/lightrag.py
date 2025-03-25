@@ -53,7 +53,7 @@ from .utils import (
     logger,
 )
 from .types import KnowledgeGraph
-from .llm import MultiModalProcessor
+from .multimodalprocessor import MultiModalProcessor
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -209,6 +209,9 @@ class LightRAG:
     # ---
 
     llm_model_func: Callable[..., object] | None = field(default=None)
+    """Function for interacting with the large language model (LLM). Must be set before use."""
+
+    modal_caption_func: Callable[..., object] | None = field(default=None)
     """Function for interacting with the large language model (LLM). Must be set before use."""
 
     llm_model_name: str = field(default="gpt-4o-mini")
@@ -3147,15 +3150,15 @@ class LightRAG:
         """处理多模态内容并更新知识图谱"""
         processor = MultiModalProcessor(
             modal_caption_func=self.modal_caption_func,  # 需要在LightRAG初始化时提供
-            text_chunks_db=self.text_chunks_db,
+            text_chunks_db=self.text_chunks,
             chunks_vdb=self.chunks_vdb,
             entities_vdb=self.entities_vdb,
             relationships_vdb=self.relationships_vdb,
-            knowledge_graph_inst=self.knowledge_graph_inst,
+            knowledge_graph_inst=self.chunk_entity_relation_graph,
             embedding_func=self.embedding_func,
             llm_model_func=self.llm_model_func,
-            global_config=self.global_config,
-            hashing_kv=self.hashing_kv,
+            global_config=asdict(self),
+            hashing_kv=self.llm_response_cache,
         )
         
         return await processor.process_multimodal_content(

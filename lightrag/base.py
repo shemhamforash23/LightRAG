@@ -1,20 +1,22 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from enum import Enum
 import os
-from dotenv import load_dotenv
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import (
     Any,
+    Callable,
     Literal,
     TypedDict,
     TypeVar,
-    Callable,
 )
+
 import numpy as np
-from .utils import EmbeddingFunc
+from dotenv import load_dotenv
+
 from .types import KnowledgeGraph
+from .utils import EmbeddingFunc
 
 # use the .env that is inside the current folder
 # allows to use different .env file for each lightrag instance
@@ -63,9 +65,7 @@ class QueryParam:
     max_token_for_text_unit: int = int(os.getenv("MAX_TOKEN_TEXT_CHUNK", "4000"))
     """Maximum number of tokens allowed for each retrieved text chunk."""
 
-    max_token_for_global_context: int = int(
-        os.getenv("MAX_TOKEN_RELATION_DESC", "4000")
-    )
+    max_token_for_global_context: int = int(os.getenv("MAX_TOKEN_RELATION_DESC", "4000"))
     """Maximum number of tokens allocated for relationship descriptions in global retrieval."""
 
     max_token_for_local_context: int = int(os.getenv("MAX_TOKEN_ENTITY_DESC", "4000"))
@@ -138,6 +138,36 @@ class BaseVectorStorage(StorageNameSpace, ABC):
         """Delete relations for a given entity."""
 
     @abstractmethod
+    async def delete(self, ids: list[str]) -> None:
+        """Delete vectors with the specified IDs from the storage
+
+        Args:
+            ids: List of vector IDs to be deleted
+        """
+
+    @abstractmethod
+    async def get_entities_by_source_id(self, source_id: str) -> list[dict[str, Any]]:
+        """Get all entities that reference the given source_id
+
+        Args:
+            source_id: Source ID (usually a chunk ID) to find related entities
+
+        Returns:
+            List of entities that reference the source_id
+        """
+
+    @abstractmethod
+    async def get_relations_by_source_id(self, source_id: str) -> list[dict[str, Any]]:
+        """Get all relations that reference the given source_id
+
+        Args:
+            source_id: Source ID (usually a chunk ID) to find related relations
+
+        Returns:
+            List of relations that reference the source_id
+        """
+
+    @abstractmethod
     async def get_by_id(self, id: str) -> dict[str, Any] | None:
         """Get vector data by its ID
 
@@ -182,6 +212,33 @@ class BaseKVStorage(StorageNameSpace, ABC):
     async def upsert(self, data: dict[str, dict[str, Any]]) -> None:
         """Upsert data"""
 
+    @abstractmethod
+    async def delete(self, ids: list[str]) -> None:
+        """Delete records with the specified IDs from the storage
+
+        Args:
+            ids: List of record IDs to be deleted
+        """
+
+    @abstractmethod
+    async def get_all(self) -> dict[str, dict[str, Any]]:
+        """Get all records from the storage
+
+        Returns:
+            Dictionary where keys are record IDs and values are record data
+        """
+
+    @abstractmethod
+    async def get_chunks_by_doc_id(self, doc_id: str) -> dict[str, dict[str, Any]]:
+        """Get all chunks associated with a document ID
+
+        Args:
+            doc_id: Document ID to get chunks for
+
+        Returns:
+            Dictionary where keys are chunk IDs and values are chunk data
+        """
+
 
 @dataclass
 class BaseGraphStorage(StorageNameSpace, ABC):
@@ -208,9 +265,7 @@ class BaseGraphStorage(StorageNameSpace, ABC):
         """Get an edge by its source and target node ids."""
 
     @abstractmethod
-    async def get_edge(
-        self, source_node_id: str, target_node_id: str
-    ) -> dict[str, str] | None:
+    async def get_edge(self, source_node_id: str, target_node_id: str) -> dict[str, str] | None:
         """Get all edges connected to a node."""
 
     @abstractmethod
@@ -229,21 +284,35 @@ class BaseGraphStorage(StorageNameSpace, ABC):
 
     @abstractmethod
     async def delete_node(self, node_id: str) -> None:
+        """Delete a single node from the graph."""
+
+    @abstractmethod
+    async def remove_nodes(self, nodes: list[str]) -> None:
+        """Removes multiple nodes from the graph
+
+        Args:
+            nodes: List of node IDs to be deleted
+        """
+
+    @abstractmethod
+    async def remove_edges(self, edges: list[tuple[str, str]]) -> None:
+        """Removes multiple edges from the graph
+
+        Args:
+            edges: List of edges to be deleted, each edge is a (source, target) tuple
+        """
+
+    @abstractmethod
+    async def embed_nodes(self, algorithm: str) -> tuple[np.ndarray[Any, Any], list[str]]:
         """Embed nodes using an algorithm."""
 
     @abstractmethod
-    async def embed_nodes(
-        self, algorithm: str
-    ) -> tuple[np.ndarray[Any, Any], list[str]]:
+    async def get_all_labels(self) -> list[str]:
         """Get all labels in the graph."""
 
     @abstractmethod
-    async def get_all_labels(self) -> list[str]:
-        """Get a knowledge graph of a node."""
-
-    @abstractmethod
     async def get_knowledge_graph(
-        self, node_label: str, max_depth: int = 3
+        self, node_label: str, max_depth: int = 3, min_degree: int = 0, inclusive: bool = False
     ) -> KnowledgeGraph:
         """Retrieve a subgraph of the knowledge graph starting from a given node."""
 
@@ -292,10 +361,16 @@ class DocStatusStorage(BaseKVStorage, ABC):
         """Get counts of documents in each status"""
 
     @abstractmethod
-    async def get_docs_by_status(
-        self, status: DocStatus
-    ) -> dict[str, DocProcessingStatus]:
+    async def get_docs_by_status(self, status: DocStatus) -> dict[str, DocProcessingStatus]:
         """Get all documents with a specific status"""
+
+    @abstractmethod
+    async def delete(self, ids: list[str]) -> None:
+        """Delete document status records with the specified IDs
+
+        Args:
+            ids: List of document IDs to be deleted
+        """
 
 
 class StoragesStatus(str, Enum):

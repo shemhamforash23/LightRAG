@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import Any
 
 GRAPH_FIELD_SEP = "<SEP>"
@@ -10,29 +11,38 @@ PROMPTS["DEFAULT_TUPLE_DELIMITER"] = "<|>"
 PROMPTS["DEFAULT_RECORD_DELIMITER"] = "##"
 PROMPTS["DEFAULT_COMPLETION_DELIMITER"] = "<|COMPLETE|>"
 
-PROMPTS["DEFAULT_ENTITY_TYPES"] = ["organization", "person", "geo", "event", "category"]
+PROMPTS["DEFAULT_ENTITY_TYPES"] = [
+    "module",
+    "class",
+    "function",
+    "method",
+    "variable",
+    "interface",
+    "library",
+    "framework",
+]
 
 PROMPTS["entity_extraction"] = """---Goal---
-Given a text document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the text and all relationships among the identified entities.
+Given a code snippet or documentation that is potentially relevant to this activity and a list of entity types, identify all code entities of those types from the text and all relationships among the identified entities.
 Use {language} as output language.
 
 ---Steps---
-1. Identify all entities. For each identified entity, extract the following information:
-- entity_name: Name of the entity, use same language as input text. If English, capitalized the name.
+1. Identify all code entities. For each identified entity, extract the following information:
+- entity_name: Name of the entity, use same language as input text. Preserve the exact casing of the entity name.
 - entity_type: One of the following types: [{entity_types}]
-- entity_description: Comprehensive description of the entity's attributes and activities
+- entity_description: Comprehensive description of the entity's purpose, functionality, and implementation details
 Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>)
 
 2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
 For each pair of related entities, extract the following information:
 - source_entity: name of the source entity, as identified in step 1
 - target_entity: name of the target entity, as identified in step 1
-- relationship_description: explanation as to why you think the source entity and the target entity are related to each other
+- relationship_description: explanation as to why you think the source entity and the target entity are related to each other (e.g., inheritance, composition, dependency, function call)
 - relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
-- relationship_keywords: one or more high-level key words that summarize the overarching nature of the relationship, focusing on concepts or themes rather than specific details
+- relationship_keywords: one or more high-level key words that summarize the overarching nature of the relationship, focusing on concepts or themes rather than specific details (e.g., "imports", "extends", "implements", "calls", "uses")
 Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
 
-3. Identify high-level key words that summarize the main concepts, themes, or topics of the entire text. These should capture the overarching ideas present in the document.
+3. Identify high-level key words that summarize the main concepts, themes, or topics of the entire code. These should capture the overarching ideas, patterns, or architecture present in the code.
 Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
 
 4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
@@ -51,86 +61,175 @@ Entity_types: [{entity_types}]
 Text:
 {input_text}
 ######################
-Output:"""
+Output:
+"""
 
 PROMPTS["entity_extraction_examples"] = [
     """Example 1:
 
-Entity_types: [person, technology, mission, organization, location]
+Entity_types: [class, method, function, module, library]
 Text:
-```
-while Alex clenched his jaw, the buzz of frustration dull against the backdrop of Taylor's authoritarian certainty. It was this competitive undercurrent that kept him alert, the sense that his and Jordan's shared commitment to discovery was an unspoken rebellion against Cruz's narrowing vision of control and order.
+```python
+import numpy as np
+from sklearn.model_selection import train_test_split
 
-Then Taylor did something unexpected. They paused beside Jordan and, for a moment, observed the device with something akin to reverence. "If this tech can be understood..." Taylor said, their voice quieter, "It could change the game for us. For all of us."
+class DataProcessor:
+    def __init__(self, data_path):
+        self.data_path = data_path
+        self.data = None
+    
+    def load_data(self):
+        self.data = np.loadtxt(self.data_path, delimiter=',')
+        return self.data
+    
+    def preprocess(self, normalize=True):
+        if self.data is None:
+            self.load_data()
+        
+        if normalize:
+            self.data = (self.data - np.mean(self.data, axis=0)) / np.std(self.data, axis=0)
+        
+        return self.data
 
-The underlying dismissal earlier seemed to falter, replaced by a glimpse of reluctant respect for the gravity of what lay in their hands. Jordan looked up, and for a fleeting heartbeat, their eyes locked with Taylor's, a wordless clash of wills softening into an uneasy truce.
-
-It was a small transformation, barely perceptible, but one that Alex noted with an inward nod. They had all been brought here by different paths
+def split_dataset(data, test_size=0.2, random_state=42):
+    X = data[:, :-1]
+    y = data[:, -1]
+    return train_test_split(X, y, test_size=test_size, random_state=random_state)
 ```
 
 Output:
-("entity"{tuple_delimiter}"Alex"{tuple_delimiter}"person"{tuple_delimiter}"Alex is a character who experiences frustration and is observant of the dynamics among other characters."){record_delimiter}
-("entity"{tuple_delimiter}"Taylor"{tuple_delimiter}"person"{tuple_delimiter}"Taylor is portrayed with authoritarian certainty and shows a moment of reverence towards a device, indicating a change in perspective."){record_delimiter}
-("entity"{tuple_delimiter}"Jordan"{tuple_delimiter}"person"{tuple_delimiter}"Jordan shares a commitment to discovery and has a significant interaction with Taylor regarding a device."){record_delimiter}
-("entity"{tuple_delimiter}"Cruz"{tuple_delimiter}"person"{tuple_delimiter}"Cruz is associated with a vision of control and order, influencing the dynamics among other characters."){record_delimiter}
-("entity"{tuple_delimiter}"The Device"{tuple_delimiter}"technology"{tuple_delimiter}"The Device is central to the story, with potential game-changing implications, and is revered by Taylor."){record_delimiter}
-("relationship"{tuple_delimiter}"Alex"{tuple_delimiter}"Taylor"{tuple_delimiter}"Alex is affected by Taylor's authoritarian certainty and observes changes in Taylor's attitude towards the device."{tuple_delimiter}"power dynamics, perspective shift"{tuple_delimiter}7){record_delimiter}
-("relationship"{tuple_delimiter}"Alex"{tuple_delimiter}"Jordan"{tuple_delimiter}"Alex and Jordan share a commitment to discovery, which contrasts with Cruz's vision."{tuple_delimiter}"shared goals, rebellion"{tuple_delimiter}6){record_delimiter}
-("relationship"{tuple_delimiter}"Taylor"{tuple_delimiter}"Jordan"{tuple_delimiter}"Taylor and Jordan interact directly regarding the device, leading to a moment of mutual respect and an uneasy truce."{tuple_delimiter}"conflict resolution, mutual respect"{tuple_delimiter}8){record_delimiter}
-("relationship"{tuple_delimiter}"Jordan"{tuple_delimiter}"Cruz"{tuple_delimiter}"Jordan's commitment to discovery is in rebellion against Cruz's vision of control and order."{tuple_delimiter}"ideological conflict, rebellion"{tuple_delimiter}5){record_delimiter}
-("relationship"{tuple_delimiter}"Taylor"{tuple_delimiter}"The Device"{tuple_delimiter}"Taylor shows reverence towards the device, indicating its importance and potential impact."{tuple_delimiter}"reverence, technological significance"{tuple_delimiter}9){record_delimiter}
-("content_keywords"{tuple_delimiter}"power dynamics, ideological conflict, discovery, rebellion"){completion_delimiter}
+("entity"{tuple_delimiter}"numpy"{tuple_delimiter}"library"{tuple_delimiter}"NumPy is a library for numerical computing in Python, providing support for arrays, matrices, and mathematical functions."){record_delimiter}
+("entity"{tuple_delimiter}"sklearn.model_selection"{tuple_delimiter}"module"{tuple_delimiter}"A module from scikit-learn that provides utilities for splitting datasets into training and testing sets."){record_delimiter}
+("entity"{tuple_delimiter}"train_test_split"{tuple_delimiter}"function"{tuple_delimiter}"A function from sklearn.model_selection that splits arrays or matrices into random train and test subsets."){record_delimiter}
+("entity"{tuple_delimiter}"DataProcessor"{tuple_delimiter}"class"{tuple_delimiter}"A class designed to load and preprocess data from a specified file path, with options for normalization."){record_delimiter}
+("entity"{tuple_delimiter}"__init__"{tuple_delimiter}"method"{tuple_delimiter}"Constructor method for the DataProcessor class that initializes the data_path attribute and sets data to None."){record_delimiter}
+("entity"{tuple_delimiter}"load_data"{tuple_delimiter}"method"{tuple_delimiter}"Method of DataProcessor that loads data from the specified file path using numpy's loadtxt function."){record_delimiter}
+("entity"{tuple_delimiter}"preprocess"{tuple_delimiter}"method"{tuple_delimiter}"Method of DataProcessor that normalizes data if specified, ensuring data is loaded first if it hasn't been already."){record_delimiter}
+("entity"{tuple_delimiter}"split_dataset"{tuple_delimiter}"function"{tuple_delimiter}"A standalone function that splits a dataset into features and target, then into training and testing sets using sklearn's train_test_split."){record_delimiter}
+("relationship"{tuple_delimiter}"DataProcessor"{tuple_delimiter}"load_data"{tuple_delimiter}"The DataProcessor class contains the load_data method which is responsible for loading data from a file."{tuple_delimiter}"class method, data loading"{tuple_delimiter}9){record_delimiter}
+("relationship"{tuple_delimiter}"DataProcessor"{tuple_delimiter}"preprocess"{tuple_delimiter}"The DataProcessor class contains the preprocess method which is responsible for normalizing the data."{tuple_delimiter}"class method, data transformation"{tuple_delimiter}9){record_delimiter}
+("relationship"{tuple_delimiter}"preprocess"{tuple_delimiter}"load_data"{tuple_delimiter}"The preprocess method calls the load_data method if data hasn't been loaded yet."{tuple_delimiter}"method call, dependency"{tuple_delimiter}7){record_delimiter}
+("relationship"{tuple_delimiter}"load_data"{tuple_delimiter}"numpy"{tuple_delimiter}"The load_data method uses numpy's loadtxt function to read data from a file."{tuple_delimiter}"library usage, data loading"{tuple_delimiter}8){record_delimiter}
+("relationship"{tuple_delimiter}"preprocess"{tuple_delimiter}"numpy"{tuple_delimiter}"The preprocess method uses numpy functions like mean and std for data normalization."{tuple_delimiter}"library usage, data processing"{tuple_delimiter}8){record_delimiter}
+("relationship"{tuple_delimiter}"split_dataset"{tuple_delimiter}"train_test_split"{tuple_delimiter}"The split_dataset function uses the train_test_split function from sklearn to divide data into training and testing sets."{tuple_delimiter}"function call, data splitting"{tuple_delimiter}9){record_delimiter}
+("content_keywords"{tuple_delimiter}"data processing, machine learning preprocessing, dataset splitting, normalization, numpy operations"){completion_delimiter}
+
 #############################""",
-    """Example 2:
+    """
+Example 2:
 
-Entity_types: [company, index, commodity, market_trend, economic_policy, biological]
+Entity_types: [class, function, module, variable, interface]
 Text:
-```
-Stock markets faced a sharp downturn today as tech giants saw significant declines, with the Global Tech Index dropping by 3.4% in midday trading. Analysts attribute the selloff to investor concerns over rising interest rates and regulatory uncertainty.
+```python
+# Authentication service for user management
+from typing import Optional, Dict, Any
+import requests
+import json
+import os
 
-Among the hardest hit, Nexon Technologies saw its stock plummet by 7.8% after reporting lower-than-expected quarterly earnings. In contrast, Omega Energy posted a modest 2.1% gain, driven by rising oil prices.
-
-Meanwhile, commodity markets reflected a mixed sentiment. Gold futures rose by 1.5%, reaching $2,080 per ounce, as investors sought safe-haven assets. Crude oil prices continued their rally, climbing to $87.60 per barrel, supported by supply constraints and strong demand.
-
-Financial experts are closely watching the Federal Reserve's next move, as speculation grows over potential rate hikes. The upcoming policy announcement is expected to influence investor confidence and overall market stability.
+class AuthService:
+    \\\"\\\"\\\"Service for handling authentication operations\\\"\\\"\\\"\"
+    
+    def __init__(self, base_url: str):
+        \\\"\\\"\\\"Initialize the auth service with base URL\\\"\\\"\\\"\"
+        self.api_url = base_url + '/auth'
+        self.current_user_key = 'current_user'
+        self.session = requests.Session()
+    
+    def login(self, email: str, password: str) -> Dict[str, Any]:
+        \\\"\\\"\\\"Log in a user with email and password\\\"\\\"\\\"\"
+        response = self.session.post(
+            self.api_url + '/login',
+            data=dict(email=email, password=password)
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        # Store user details and token
+        os.environ[self.current_user_key] = json.dumps(data)
+        return data.get('user')
+    
+    def logout(self) -> None:
+        \\\"\\\"\\\"Log out the current user\\\"\\\"\\\"\"
+        if self.current_user_key in os.environ:
+            del os.environ[self.current_user_key]
+    
+    def get_current_user(self) -> Optional[Dict[str, Any]]:
+        \\\"\\\"\\\"Get the currently logged in user\\\"\\\"\\\"\"
+        user_data = os.environ.get(self.current_user_key)
+        if user_data:
+            data = json.loads(user_data)
+            return data.get('user')
+        return None
 ```
 
 Output:
-("entity"{tuple_delimiter}"Global Tech Index"{tuple_delimiter}"index"{tuple_delimiter}"The Global Tech Index tracks the performance of major technology stocks and experienced a 3.4% decline today."){record_delimiter}
-("entity"{tuple_delimiter}"Nexon Technologies"{tuple_delimiter}"company"{tuple_delimiter}"Nexon Technologies is a tech company that saw its stock decline by 7.8% after disappointing earnings."){record_delimiter}
-("entity"{tuple_delimiter}"Omega Energy"{tuple_delimiter}"company"{tuple_delimiter}"Omega Energy is an energy company that gained 2.1% in stock value due to rising oil prices."){record_delimiter}
-("entity"{tuple_delimiter}"Gold Futures"{tuple_delimiter}"commodity"{tuple_delimiter}"Gold futures rose by 1.5%, indicating increased investor interest in safe-haven assets."){record_delimiter}
-("entity"{tuple_delimiter}"Crude Oil"{tuple_delimiter}"commodity"{tuple_delimiter}"Crude oil prices rose to $87.60 per barrel due to supply constraints and strong demand."){record_delimiter}
-("entity"{tuple_delimiter}"Market Selloff"{tuple_delimiter}"market_trend"{tuple_delimiter}"Market selloff refers to the significant decline in stock values due to investor concerns over interest rates and regulations."){record_delimiter}
-("entity"{tuple_delimiter}"Federal Reserve Policy Announcement"{tuple_delimiter}"economic_policy"{tuple_delimiter}"The Federal Reserve's upcoming policy announcement is expected to impact investor confidence and market stability."){record_delimiter}
-("relationship"{tuple_delimiter}"Global Tech Index"{tuple_delimiter}"Market Selloff"{tuple_delimiter}"The decline in the Global Tech Index is part of the broader market selloff driven by investor concerns."{tuple_delimiter}"market performance, investor sentiment"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"Nexon Technologies"{tuple_delimiter}"Global Tech Index"{tuple_delimiter}"Nexon Technologies' stock decline contributed to the overall drop in the Global Tech Index."{tuple_delimiter}"company impact, index movement"{tuple_delimiter}8){record_delimiter}
-("relationship"{tuple_delimiter}"Gold Futures"{tuple_delimiter}"Market Selloff"{tuple_delimiter}"Gold prices rose as investors sought safe-haven assets during the market selloff."{tuple_delimiter}"market reaction, safe-haven investment"{tuple_delimiter}10){record_delimiter}
-("relationship"{tuple_delimiter}"Federal Reserve Policy Announcement"{tuple_delimiter}"Market Selloff"{tuple_delimiter}"Speculation over Federal Reserve policy changes contributed to market volatility and investor selloff."{tuple_delimiter}"interest rate impact, financial regulation"{tuple_delimiter}7){record_delimiter}
-("content_keywords"{tuple_delimiter}"market downturn, investor sentiment, commodities, Federal Reserve, stock performance"){completion_delimiter}
-#############################""",
-    """Example 3:
-
-Entity_types: [economic_policy, athlete, event, location, record, organization, equipment]
-Text:
-```
-At the World Athletics Championship in Tokyo, Noah Carter broke the 100m sprint record using cutting-edge carbon-fiber spikes.
-```
-
-Output:
-("entity"{tuple_delimiter}"World Athletics Championship"{tuple_delimiter}"event"{tuple_delimiter}"The World Athletics Championship is a global sports competition featuring top athletes in track and field."){record_delimiter}
-("entity"{tuple_delimiter}"Tokyo"{tuple_delimiter}"location"{tuple_delimiter}"Tokyo is the host city of the World Athletics Championship."){record_delimiter}
-("entity"{tuple_delimiter}"Noah Carter"{tuple_delimiter}"athlete"{tuple_delimiter}"Noah Carter is a sprinter who set a new record in the 100m sprint at the World Athletics Championship."){record_delimiter}
-("entity"{tuple_delimiter}"100m Sprint Record"{tuple_delimiter}"record"{tuple_delimiter}"The 100m sprint record is a benchmark in athletics, recently broken by Noah Carter."){record_delimiter}
-("entity"{tuple_delimiter}"Carbon-Fiber Spikes"{tuple_delimiter}"equipment"{tuple_delimiter}"Carbon-fiber spikes are advanced sprinting shoes that provide enhanced speed and traction."){record_delimiter}
-("entity"{tuple_delimiter}"World Athletics Federation"{tuple_delimiter}"organization"{tuple_delimiter}"The World Athletics Federation is the governing body overseeing the World Athletics Championship and record validations."){record_delimiter}
-("relationship"{tuple_delimiter}"World Athletics Championship"{tuple_delimiter}"Tokyo"{tuple_delimiter}"The World Athletics Championship is being hosted in Tokyo."{tuple_delimiter}"event location, international competition"{tuple_delimiter}8){record_delimiter}
-("relationship"{tuple_delimiter}"Noah Carter"{tuple_delimiter}"100m Sprint Record"{tuple_delimiter}"Noah Carter set a new 100m sprint record at the championship."{tuple_delimiter}"athlete achievement, record-breaking"{tuple_delimiter}10){record_delimiter}
-("relationship"{tuple_delimiter}"Noah Carter"{tuple_delimiter}"Carbon-Fiber Spikes"{tuple_delimiter}"Noah Carter used carbon-fiber spikes to enhance performance during the race."{tuple_delimiter}"athletic equipment, performance boost"{tuple_delimiter}7){record_delimiter}
-("relationship"{tuple_delimiter}"World Athletics Federation"{tuple_delimiter}"100m Sprint Record"{tuple_delimiter}"The World Athletics Federation is responsible for validating and recognizing new sprint records."{tuple_delimiter}"sports regulation, record certification"{tuple_delimiter}9){record_delimiter}
-("content_keywords"{tuple_delimiter}"athletics, sprinting, record-breaking, sports technology, competition"){completion_delimiter}
-#############################""",
+("entity"{tuple_delimiter}"requests"{tuple_delimiter}"module"{tuple_delimiter}"A Python library for making HTTP requests, providing a simple API for interacting with web services."){record_delimiter}
+("entity"{tuple_delimiter}"json"{tuple_delimiter}"module"{tuple_delimiter}"A Python module for encoding and decoding JSON data, used for serializing and deserializing data structures."){record_delimiter}
+("entity"{tuple_delimiter}"os"{tuple_delimiter}"module"{tuple_delimiter}"A Python module providing a way to interact with the operating system, including environment variables."){record_delimiter}
+("entity"{tuple_delimiter}"AuthService"{tuple_delimiter}"class"{tuple_delimiter}"A service class responsible for handling authentication operations like login, logout, and retrieving the current user."){record_delimiter}
+("entity"{tuple_delimiter}"__init__"{tuple_delimiter}"method"{tuple_delimiter}"Constructor method for the AuthService class that initializes the API URL, user key, and creates a session."){record_delimiter}
+("entity"{tuple_delimiter}"api_url"{tuple_delimiter}"variable"{tuple_delimiter}"An instance variable in AuthService that stores the base URL for authentication API endpoints."){record_delimiter}
+("entity"{tuple_delimiter}"current_user_key"{tuple_delimiter}"variable"{tuple_delimiter}"An instance variable in AuthService that defines the key used for storing user data in environment variables."){record_delimiter}
+("entity"{tuple_delimiter}"session"{tuple_delimiter}"variable"{tuple_delimiter}"An instance variable in AuthService that holds a requests Session object for making HTTP requests."){record_delimiter}
+("entity"{tuple_delimiter}"login"{tuple_delimiter}"method"{tuple_delimiter}"A method in AuthService that sends user credentials to the server and stores the returned user data."){record_delimiter}
+("entity"{tuple_delimiter}"logout"{tuple_delimiter}"method"{tuple_delimiter}"A method in AuthService that removes the current user's data from environment variables."){record_delimiter}
+("entity"{tuple_delimiter}"get_current_user"{tuple_delimiter}"method"{tuple_delimiter}"A method in AuthService that retrieves and parses the current user's data from environment variables."){record_delimiter}
+("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"__init__"{tuple_delimiter}"The AuthService class contains the __init__ method which initializes the service with necessary configuration."{tuple_delimiter}"class method, initialization"{tuple_delimiter}9){record_delimiter}
+("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"login"{tuple_delimiter}"The AuthService class contains the login method which authenticates users with the server."{tuple_delimiter}"class method, authentication"{tuple_delimiter}9){record_delimiter}
+("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"logout"{tuple_delimiter}"The AuthService class contains the logout method which removes user authentication data."{tuple_delimiter}"class method, authentication"{tuple_delimiter}9){record_delimiter}
+("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"get_current_user"{tuple_delimiter}"The AuthService class contains the get_current_user method which retrieves the authenticated user."{tuple_delimiter}"class method, user retrieval"{tuple_delimiter}9){record_delimiter}
+("relationship"{tuple_delimiter}"login"{tuple_delimiter}"requests"{tuple_delimiter}"The login method uses the requests module to make HTTP POST requests to the authentication endpoint."{tuple_delimiter}"module usage, HTTP communication"{tuple_delimiter}8){record_delimiter}
+("relationship"{tuple_delimiter}"login"{tuple_delimiter}"json"{tuple_delimiter}"The login method uses the json module to serialize and deserialize data between Python and JSON."{tuple_delimiter}"module usage, data serialization"{tuple_delimiter}7){record_delimiter}
+("relationship"{tuple_delimiter}"login"{tuple_delimiter}"os"{tuple_delimiter}"The login method uses the os module to store user data in environment variables."{tuple_delimiter}"module usage, data storage"{tuple_delimiter}7){record_delimiter}
+("relationship"{tuple_delimiter}"logout"{tuple_delimiter}"os"{tuple_delimiter}"The logout method uses the os module to remove user data from environment variables."{tuple_delimiter}"module usage, data removal"{tuple_delimiter}7){record_delimiter}
+("relationship"{tuple_delimiter}"get_current_user"{tuple_delimiter}"os"{tuple_delimiter}"The get_current_user method uses the os module to retrieve user data from environment variables."{tuple_delimiter}"module usage, data retrieval"{tuple_delimiter}7){record_delimiter}
+("relationship"{tuple_delimiter}"get_current_user"{tuple_delimiter}"json"{tuple_delimiter}"The get_current_user method uses the json module to parse user data from a JSON string."{tuple_delimiter}"module usage, data deserialization"{tuple_delimiter}7){record_delimiter}
+("content_keywords"{tuple_delimiter}"authentication, Python service, HTTP requests, environment variables, user management, JSON serialization"){completion_delimiter}
+""",
 ]
+
+PROMPTS["entity_continue_extraction"] = """
+MANY entities and relationships were missed in the last extraction.
+
+---Remember Steps---
+
+1. Identify all code entities. For each identified entity, extract the following information:
+- entity_name: Name of the entity, use same language as input text. Preserve the exact casing of the entity name.
+- entity_type: One of the following types: [{entity_types}]
+- entity_description: Comprehensive description of the entity's purpose, functionality, and implementation details
+Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>)
+
+2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
+For each pair of related entities, extract the following information:
+- source_entity: name of the source entity, as identified in step 1
+- target_entity: name of the target entity, as identified in step 1
+- relationship_description: explanation as to why you think the source entity and the target entity are related to each other (e.g., inheritance, composition, dependency, function call)
+- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
+- relationship_keywords: one or more high-level key words that summarize the overarching nature of the relationship, focusing on concepts or themes rather than specific details (e.g., "imports", "extends", "implements", "calls", "uses")
+Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
+
+3. Identify high-level key words that summarize the main concepts, themes, or topics of the entire code. These should capture the overarching ideas, patterns, or architecture present in the code.
+Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
+
+4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
+
+5. When finished, output {completion_delimiter}
+
+----Output---
+
+Add them below using the same format:
+"""
+
+PROMPTS["entity_if_loop_extraction"] = """
+----Goal---'
+
+It appears some entities may have still been missed.
+
+----Output---
+
+Answer ONLY by `YES` OR `NO` if there are still entities that need to be added.
+"""
 
 PROMPTS[
     "summarize_entity_descriptions"
@@ -149,51 +248,7 @@ Description List: {description_list}
 Output:
 """
 
-PROMPTS["entity_continue_extraction"] = """
-MANY entities and relationships were missed in the last extraction.
-
----Remember Steps---
-
-1. Identify all entities. For each identified entity, extract the following information:
-- entity_name: Name of the entity, use same language as input text. If English, capitalized the name.
-- entity_type: One of the following types: [{entity_types}]
-- entity_description: Comprehensive description of the entity's attributes and activities
-Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>
-
-2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
-For each pair of related entities, extract the following information:
-- source_entity: name of the source entity, as identified in step 1
-- target_entity: name of the target entity, as identified in step 1
-- relationship_description: explanation as to why you think the source entity and the target entity are related to each other
-- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
-- relationship_keywords: one or more high-level key words that summarize the overarching nature of the relationship, focusing on concepts or themes rather than specific details
-Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
-
-3. Identify high-level key words that summarize the main concepts, themes, or topics of the entire text. These should capture the overarching ideas present in the document.
-Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
-
-4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
-
-5. When finished, output {completion_delimiter}
-
----Output---
-
-Add them below using the same format:\n
-""".strip()
-
-PROMPTS["entity_if_loop_extraction"] = """
----Goal---'
-
-It appears some entities may have still been missed.
-
----Output---
-
-Answer ONLY by `YES` OR `NO` if there are still entities that need to be added.
-""".strip()
-
-PROMPTS["fail_response"] = (
-    "Sorry, I'm not able to provide an answer to that question.[no-context]"
-)
+PROMPTS["fail_response"] = "Sorry, I'm not able to provide an answer to that question.[no-context]"
 
 PROMPTS["rag_response"] = """---Role---
 
@@ -224,7 +279,7 @@ When handling relationships with timestamps:
 - Ensure the response maintains continuity with the conversation history.
 - List up to 5 most important reference sources at the end under "References" section. Clearly indicating whether each source is from Knowledge Graph (KG) or Vector Data (DC), and include the file path if available, in the following format: [KG/DC] file_path
 - If you don't know the answer, just say so.
-- Do not make anything up. Do not include information not provided by the Knowledge Base."""
+- Do not make anything up. Do not include information not provided by Knowledge Base."""
 
 PROMPTS["keywords_extraction"] = """---Role---
 
@@ -263,36 +318,55 @@ Output:
 PROMPTS["keywords_extraction_examples"] = [
     """Example 1:
 
-Query: "How does international trade influence global economic stability?"
+Query: "How does dependency injection work in Angular?"
 ################
 Output:
 {
-  "high_level_keywords": ["International trade", "Global economic stability", "Economic impact"],
-  "low_level_keywords": ["Trade agreements", "Tariffs", "Currency exchange", "Imports", "Exports"]
+  "high_level_keywords": ["Dependency Injection", "Angular", "Framework Architecture"],
+  "low_level_keywords": ["Injector", "Providers", "@Injectable", "Services", "Injection Hierarchy", "Tokens"]
 }
 #############################""",
     """Example 2:
 
-Query: "What are the environmental consequences of deforestation on biodiversity?"
+Query: "What design patterns are used in React for state management?"
 ################
 Output:
 {
-  "high_level_keywords": ["Environmental consequences", "Deforestation", "Biodiversity loss"],
-  "low_level_keywords": ["Species extinction", "Habitat destruction", "Carbon emissions", "Rainforest", "Ecosystem"]
+  "high_level_keywords": ["Design Patterns", "React", "State Management"],
+  "low_level_keywords": ["Redux", "Context API", "Hooks", "Flux", "MobX", "Component State"]
 }
 #############################""",
     """Example 3:
 
-Query: "What is the role of education in reducing poverty?"
+Query: "How to implement multithreading in Python for data processing?"
 ################
 Output:
 {
-  "high_level_keywords": ["Education", "Poverty reduction", "Socioeconomic development"],
-  "low_level_keywords": ["School access", "Literacy rates", "Job training", "Income inequality"]
+  "high_level_keywords": ["Multithreading", "Python", "Parallel Processing"],
+  "low_level_keywords": ["threading", "multiprocessing", "asyncio", "GIL", "Thread Pool", "Locks", "Semaphores"]
+}
+#############################""",
+    """Example 4:
+
+Query: "Explain SOLID principles in object-oriented programming"
+################
+Output:
+{
+  "high_level_keywords": ["SOLID", "Object-Oriented Programming", "Design Principles"],
+  "low_level_keywords": ["Single Responsibility Principle", "Open/Closed Principle", "Liskov Substitution Principle", "Interface Segregation Principle", "Dependency Inversion Principle"]
+}
+#############################""",
+    """Example 5:
+
+Query: "What methods exist for optimizing JavaScript performance?"
+################
+Output:
+{
+  "high_level_keywords": ["Performance Optimization", "JavaScript", "Web Development"],
+  "low_level_keywords": ["Minification", "Lazy Loading", "Memoization", "Virtual DOM", "Profiling", "Event Loop", "Garbage Collection"]
 }
 #############################""",
 ]
-
 
 PROMPTS["naive_rag_response"] = """---Role---
 
@@ -322,12 +396,10 @@ When handling content with timestamps:
 - Ensure the response maintains continuity with the conversation history.
 - List up to 5 most important reference sources at the end under "References" section. Clearly indicating whether each source is from Knowledge Graph (KG) or Vector Data (DC), and include the file path if available, in the following format: [KG/DC] file_path
 - If you don't know the answer, just say so.
+- Do not make anything up.
 - Do not include information not provided by the Document Chunks."""
 
-
-PROMPTS[
-    "similarity_check"
-] = """Please analyze the similarity between these two questions:
+PROMPTS["similarity_check"] = """Please analyze the similarity between these two questions:
 
 Question 1: {original_prompt}
 Question 2: {cached_prompt}

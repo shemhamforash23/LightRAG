@@ -145,7 +145,7 @@ def main():
 
             # Timeout configuration prioritizes command line arguments
             gunicorn_config.timeout = (
-                args.timeout if args.timeout * 2 else int(os.getenv("TIMEOUT", 150 * 2))
+                args.timeout * 2 if args.timeout is not None else int(os.getenv("TIMEOUT", 150 * 2))
             )
 
             # Keepalive configuration

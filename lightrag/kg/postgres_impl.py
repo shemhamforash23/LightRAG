@@ -1,21 +1,21 @@
 import asyncio
+import configparser
 import json
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, Union, final
+
 import numpy as np
-import configparser
-
-from lightrag.types import KnowledgeGraph, KnowledgeGraphNode, KnowledgeGraphEdge
-
-import sys
 from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
+
+from lightrag.types import KnowledgeGraph, KnowledgeGraphEdge, KnowledgeGraphNode
 
 from ..base import (
     BaseGraphStorage,
@@ -109,9 +109,7 @@ class PostgreSQLDB:
                 try:
                     logger.info(f"PostgreSQL, Try Creating table {k} in database")
                     await self.execute(v["ddl"])
-                    logger.info(
-                        f"PostgreSQL, Creation success table {k} in PostgreSQL database"
-                    )
+                    logger.info(f"PostgreSQL, Creation success table {k} in PostgreSQL database")
                 except Exception as e:
                     logger.error(
                         f"PostgreSQL, Failed to create table {k} in database, Please verify the connection with PostgreSQL database, Got: {e}"
@@ -201,12 +199,8 @@ class ClientManager:
                 "POSTGRES_HOST",
                 config.get("postgres", "host", fallback="localhost"),
             ),
-            "port": os.environ.get(
-                "POSTGRES_PORT", config.get("postgres", "port", fallback=5432)
-            ),
-            "user": os.environ.get(
-                "POSTGRES_USER", config.get("postgres", "user", fallback=None)
-            ),
+            "port": os.environ.get("POSTGRES_PORT", config.get("postgres", "port", fallback=5432)),
+            "user": os.environ.get("POSTGRES_USER", config.get("postgres", "user", fallback=None)),
             "password": os.environ.get(
                 "POSTGRES_PASSWORD",
                 config.get("postgres", "password", fallback=None),
@@ -238,20 +232,22 @@ class ClientManager:
     async def release_client(cls, db: PostgreSQLDB):
         async with cls._lock:
             if db is not None:
+                pool = db.pool
+                assert pool is not None
                 if db is cls._instances["db"]:
                     cls._instances["ref_count"] -= 1
                     if cls._instances["ref_count"] == 0:
-                        await db.pool.close()
+                        await pool.close()
                         logger.info("Closed PostgreSQL database connection pool")
                         cls._instances["db"] = None
                 else:
-                    await db.pool.close()
+                    await pool.close()
 
 
 @final
 @dataclass
 class PGKVStorage(BaseKVStorage):
-    db: PostgreSQLDB = field(default=None)
+    db: PostgreSQLDB | None = field(default=None)
 
     def __post_init__(self):
         namespace_prefix = self.global_config.get("namespace_prefix")
@@ -261,6 +257,8 @@ class PGKVStorage(BaseKVStorage):
     async def initialize(self):
         if self.db is None:
             self.db = await ClientManager.get_client()
+        else:
+            await self.db.check_tables()
 
     async def finalize(self):
         if self.db is not None:
@@ -271,6 +269,8 @@ class PGKVStorage(BaseKVStorage):
 
     async def get_by_id(self, id: str) -> dict[str, Any] | None:
         """Get doc_full data by id."""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         sql = SQL_TEMPLATES["get_by_id_" + self.base_namespace]
         params = {"workspace": self.db.workspace, "id": id}
         if is_namespace(self.namespace, NameSpace.KV_STORE_LLM_RESPONSE_CACHE):
@@ -285,6 +285,8 @@ class PGKVStorage(BaseKVStorage):
 
     async def get_by_mode_and_id(self, mode: str, id: str) -> Union[dict, None]:
         """Specifically for llm_response_cache."""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         sql = SQL_TEMPLATES["get_by_mode_id_" + self.base_namespace]
         params = {"workspace": self.db.workspace, mode: mode, "id": id}
         if is_namespace(self.namespace, NameSpace.KV_STORE_LLM_RESPONSE_CACHE):
@@ -299,6 +301,8 @@ class PGKVStorage(BaseKVStorage):
     # Query by id
     async def get_by_ids(self, ids: list[str]) -> list[dict[str, Any]]:
         """Get doc_chunks data by id"""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         sql = SQL_TEMPLATES["get_by_ids_" + self.base_namespace].format(
             ids=",".join([f"'{id}'" for id in ids])
         )
@@ -320,12 +324,16 @@ class PGKVStorage(BaseKVStorage):
 
     async def get_by_status(self, status: str) -> Union[list[dict[str, Any]], None]:
         """Specifically for llm_response_cache."""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         SQL = SQL_TEMPLATES["get_by_status_" + self.base_namespace]
         params = {"workspace": self.db.workspace, "status": status}
         return await self.db.query(SQL, params, multirows=True)
 
     async def filter_keys(self, keys: set[str]) -> set[str]:
         """Filter out duplicated content"""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         sql = SQL_TEMPLATES["filter_keys"].format(
             table_name=namespace_to_table_name(self.namespace),
             ids=",".join([f"'{id}'" for id in keys]),
@@ -340,14 +348,124 @@ class PGKVStorage(BaseKVStorage):
             new_keys = set([s for s in keys if s not in exist_keys])
             return new_keys
         except Exception as e:
-            logger.error(
-                f"PostgreSQL database,\nsql:{sql},\nparams:{params},\nerror:{e}"
-            )
+            logger.error(f"PostgreSQL database,\nsql:{sql},\nparams:{params},\nerror:{e}")
             raise
+
+    async def get_all(self) -> dict[str, dict[str, Any]]:
+        """Get all records from the storage
+
+        Returns:
+            Dictionary where keys are record IDs and values are record data
+        """
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
+        table_name = namespace_to_table_name(self.namespace)
+        if not table_name:
+            logger.error(f"Unknown namespace for getting all records: {self.namespace}")
+            return {}
+
+        sql = f"SELECT * FROM {table_name} WHERE workspace=$1"
+        params = {"workspace": self.db.workspace}
+
+        try:
+            results = await self.db.query(sql, params, multirows=True)
+            if not results:
+                return {}
+
+            # Convert list of records to dictionary with ID as key
+            records_dict = {}
+            for record in results:
+                record_id = record.get("id")
+                if record_id:
+                    records_dict[record_id] = record
+
+            return records_dict
+        except Exception as e:
+            logger.error(f"Error while getting all records from {self.namespace}: {e}")
+            return {}
+
+    async def get_chunks_by_doc_id(self, doc_id: str) -> dict[str, dict[str, Any]]:
+        """Get all chunks associated with a document ID
+
+        Args:
+            doc_id: Document ID to get chunks for
+
+        Returns:
+            Dictionary where keys are chunk IDs and values are chunk data
+        """
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
+        if not is_namespace(self.namespace, NameSpace.KV_STORE_TEXT_CHUNKS):
+            logger.warning(f"get_chunks_by_doc_id called on non-chunks namespace: {self.namespace}")
+            return {}
+
+        table_name = namespace_to_table_name(self.namespace)
+        if not table_name:
+            logger.error(f"Unknown namespace for getting chunks: {self.namespace}")
+            return {}
+
+        # Query to find chunks with matching full_doc_id
+        sql = f"""
+        SELECT id, content, full_doc_id, tokens, chunk_order_index, file_path
+        FROM {table_name} 
+        WHERE workspace=$1 
+        AND full_doc_id = $2
+        """
+        params = {"workspace": self.db.workspace, "full_doc_id": doc_id}
+
+        try:
+            results = await self.db.query(sql, params, multirows=True)
+            if not results:
+                return {}
+
+            # Convert list of chunks to dictionary with ID as key
+            chunks_dict = {}
+            for chunk in results:
+                chunk_id = chunk.get("id")
+                if chunk_id:
+                    chunks_dict[chunk_id] = {
+                        "content": chunk.get("content"),
+                        "full_doc_id": chunk.get("full_doc_id"),
+                        "tokens": chunk.get("tokens"),
+                        "chunk_order_index": chunk.get("chunk_order_index"),
+                        "file_path": chunk.get("file_path"),
+                    }
+
+            return chunks_dict
+        except Exception as e:
+            logger.error(f"Error while getting chunks for document {doc_id}: {e}")
+            return {}
+
+    async def delete(self, ids: list[str]) -> None:
+        """Delete records with the specified IDs from the storage
+
+        Args:
+            ids: List of record IDs to be deleted
+        """
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
+        if not ids:
+            return
+
+        table_name = namespace_to_table_name(self.namespace)
+        if not table_name:
+            logger.error(f"Unknown namespace for record deletion: {self.namespace}")
+            return
+
+        ids_list = ",".join([f"'{id}'" for id in ids])
+        delete_sql = f"DELETE FROM {table_name} WHERE workspace=$1 AND id IN ({ids_list})"
+
+        try:
+            await self.db.execute(delete_sql, {"workspace": self.db.workspace})
+            logger.debug(f"Successfully deleted {len(ids)} records from {self.namespace}")
+        except Exception as e:
+            logger.error(f"Error while deleting records from {self.namespace}: {e}")
 
     ################ INSERT METHODS ################
     async def upsert(self, data: dict[str, dict[str, Any]]) -> None:
         logger.info(f"Inserting {len(data)} to {self.namespace}")
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         if not data:
             return
 
@@ -382,6 +500,8 @@ class PGKVStorage(BaseKVStorage):
 
     async def drop(self) -> None:
         """Drop the storage"""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         drop_sql = SQL_TEMPLATES["drop_all"]
         await self.db.execute(drop_sql)
 
@@ -406,6 +526,8 @@ class PGVectorStorage(BaseVectorStorage):
     async def initialize(self):
         if self.db is None:
             self.db = await ClientManager.get_client()
+        else:
+            await self.db.check_tables()
 
     async def finalize(self):
         if self.db is not None:
@@ -413,6 +535,8 @@ class PGVectorStorage(BaseVectorStorage):
             self.db = None
 
     def _upsert_chunks(self, item: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         try:
             upsert_sql = SQL_TEMPLATES["upsert_chunk"]
             data: dict[str, Any] = {
@@ -423,7 +547,7 @@ class PGVectorStorage(BaseVectorStorage):
                 "full_doc_id": item["full_doc_id"],
                 "content": item["content"],
                 "content_vector": json.dumps(item["__vector__"].tolist()),
-                "file_path": item["file_path"],
+                "file_path": item.get("file_path", "none"),
             }
         except Exception as e:
             logger.error(f"Error to prepare upsert,\nsql: {e}\nitem: {item}")
@@ -432,6 +556,8 @@ class PGVectorStorage(BaseVectorStorage):
         return upsert_sql, data
 
     def _upsert_entities(self, item: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         upsert_sql = SQL_TEMPLATES["upsert_entity"]
         source_id = item["source_id"]
         if isinstance(source_id, str) and "<SEP>" in source_id:
@@ -446,12 +572,14 @@ class PGVectorStorage(BaseVectorStorage):
             "content": item["content"],
             "content_vector": json.dumps(item["__vector__"].tolist()),
             "chunk_ids": chunk_ids,
-            "file_path": item["file_path"],
+            "file_path": item.get("file_path", "none"),
             # TODO: add document_id
         }
         return upsert_sql, data
 
     def _upsert_relationships(self, item: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         upsert_sql = SQL_TEMPLATES["upsert_relationship"]
         source_id = item["source_id"]
         if isinstance(source_id, str) and "<SEP>" in source_id:
@@ -467,12 +595,14 @@ class PGVectorStorage(BaseVectorStorage):
             "content": item["content"],
             "content_vector": json.dumps(item["__vector__"].tolist()),
             "chunk_ids": chunk_ids,
-            "file_path": item["file_path"],
+            "file_path": item.get("file_path", "none"),
             # TODO: add document_id
         }
         return upsert_sql, data
 
     async def upsert(self, data: dict[str, dict[str, Any]]) -> None:
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         logger.info(f"Inserting {len(data)} to {self.namespace}")
         if not data:
             return
@@ -518,6 +648,9 @@ class PGVectorStorage(BaseVectorStorage):
         embedding = embeddings[0]
         embedding_string = ",".join(map(str, embedding))
 
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
+
         if ids:
             formatted_ids = ",".join(f"'{id}'" for id in ids)
         else:
@@ -544,6 +677,8 @@ class PGVectorStorage(BaseVectorStorage):
         Args:
             ids: List of vector IDs to be deleted
         """
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         if not ids:
             return
 
@@ -553,15 +688,11 @@ class PGVectorStorage(BaseVectorStorage):
             return
 
         ids_list = ",".join([f"'{id}'" for id in ids])
-        delete_sql = (
-            f"DELETE FROM {table_name} WHERE workspace=$1 AND id IN ({ids_list})"
-        )
+        delete_sql = f"DELETE FROM {table_name} WHERE workspace=$1 AND id IN ({ids_list})"
 
         try:
             await self.db.execute(delete_sql, {"workspace": self.db.workspace})
-            logger.debug(
-                f"Successfully deleted {len(ids)} vectors from {self.namespace}"
-            )
+            logger.debug(f"Successfully deleted {len(ids)} vectors from {self.namespace}")
         except Exception as e:
             logger.error(f"Error while deleting vectors from {self.namespace}: {e}")
 
@@ -571,6 +702,8 @@ class PGVectorStorage(BaseVectorStorage):
         Args:
             entity_name: The name of the entity to delete
         """
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         try:
             # Construct SQL to delete the entity
             delete_sql = """DELETE FROM LIGHTRAG_VDB_ENTITY
@@ -589,6 +722,8 @@ class PGVectorStorage(BaseVectorStorage):
         Args:
             entity_name: The name of the entity whose relations should be deleted
         """
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         try:
             # Delete relations where the entity is either the source or target
             delete_sql = """DELETE FROM LIGHTRAG_VDB_RELATION
@@ -610,6 +745,8 @@ class PGVectorStorage(BaseVectorStorage):
         Returns:
             List of records with matching ID prefixes
         """
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         table_name = namespace_to_table_name(self.namespace)
         if not table_name:
             logger.error(f"Unknown namespace for prefix search: {self.namespace}")
@@ -645,6 +782,8 @@ class PGVectorStorage(BaseVectorStorage):
         Returns:
             The vector data if found, or None if not found
         """
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         table_name = namespace_to_table_name(self.namespace)
         if not table_name:
             logger.error(f"Unknown namespace for ID lookup: {self.namespace}")
@@ -673,6 +812,8 @@ class PGVectorStorage(BaseVectorStorage):
         """
         if not ids:
             return []
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
 
         table_name = namespace_to_table_name(self.namespace)
         if not table_name:
@@ -690,15 +831,97 @@ class PGVectorStorage(BaseVectorStorage):
             logger.error(f"Error retrieving vector data for IDs {ids}: {e}")
             return []
 
+    async def get_entities_by_source_id(self, source_id: str) -> list[dict[str, Any]]:
+        """Get all entities that reference the given source_id
+
+        Args:
+            source_id: Source ID (usually a chunk ID) to find related entities
+
+        Returns:
+            List of entities that reference the source_id
+        """
+        if not is_namespace(self.namespace, NameSpace.VECTOR_STORE_ENTITIES):
+            logger.warning(
+                f"get_entities_by_source_id called on non-entities namespace: {self.namespace}"
+            )
+            return []
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
+
+        table_name = namespace_to_table_name(self.namespace)
+        if not table_name:
+            logger.error(f"Unknown namespace for getting entities: {self.namespace}")
+            return []
+
+        # Query to find entities that reference the source_id
+        sql = f"""
+        SELECT * FROM {table_name} 
+        WHERE workspace=$1 
+        AND $2 = ANY(chunk_ids)
+        """
+        params = {
+            "workspace": self.db.workspace,
+            "source_id": source_id,
+        }
+
+        try:
+            results = await self.db.query(sql, params, multirows=True)
+            return results if results else []
+        except Exception as e:
+            logger.error(f"Error while getting entities for source_id {source_id}: {e}")
+            return []
+
+    async def get_relations_by_source_id(self, source_id: str) -> list[dict[str, Any]]:
+        """Get all relations that reference the given source_id
+
+        Args:
+            source_id: Source ID (usually a chunk ID) to find related relations
+
+        Returns:
+            List of relations that reference the source_id
+        """
+        if not is_namespace(self.namespace, NameSpace.VECTOR_STORE_RELATIONSHIPS):
+            logger.warning(
+                f"get_relations_by_source_id called on non-relationships namespace: {self.namespace}"
+            )
+            return []
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
+
+        table_name = namespace_to_table_name(self.namespace)
+        if not table_name:
+            logger.error(f"Unknown namespace for getting relationships: {self.namespace}")
+            return []
+
+        # Query to find relationships that reference the source_id
+        sql = f"""
+        SELECT * FROM {table_name} 
+        WHERE workspace=$1 
+        AND $2 = ANY(chunk_ids)
+        """
+        params = {
+            "workspace": self.db.workspace,
+            "source_id": source_id,
+        }
+
+        try:
+            results = await self.db.query(sql, params, multirows=True)
+            return results if results else []
+        except Exception as e:
+            logger.error(f"Error while getting relationships for source_id {source_id}: {e}")
+            return []
+
 
 @final
 @dataclass
 class PGDocStatusStorage(DocStatusStorage):
-    db: PostgreSQLDB = field(default=None)
+    db: PostgreSQLDB | None = field(default=None)
 
     async def initialize(self):
         if self.db is None:
             self.db = await ClientManager.get_client()
+        else:
+            await self.db.check_tables()
 
     async def finalize(self):
         if self.db is not None:
@@ -707,6 +930,8 @@ class PGDocStatusStorage(DocStatusStorage):
 
     async def filter_keys(self, keys: set[str]) -> set[str]:
         """Filter out duplicated content"""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         sql = SQL_TEMPLATES["filter_keys"].format(
             table_name=namespace_to_table_name(self.namespace),
             ids=",".join([f"'{id}'" for id in keys]),
@@ -723,31 +948,34 @@ class PGDocStatusStorage(DocStatusStorage):
             print(f"new_keys: {new_keys}")
             return new_keys
         except Exception as e:
-            logger.error(
-                f"PostgreSQL database,\nsql:{sql},\nparams:{params},\nerror:{e}"
-            )
+            logger.error(f"PostgreSQL database,\nsql:{sql},\nparams:{params},\nerror:{e}")
             raise
 
     async def get_by_id(self, id: str) -> Union[dict[str, Any], None]:
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         sql = "select * from LIGHTRAG_DOC_STATUS where workspace=$1 and id=$2"
         params = {"workspace": self.db.workspace, "id": id}
         result = await self.db.query(sql, params, True)
         if result is None or result == []:
             return None
         else:
-            return dict(
-                content=result[0]["content"],
-                content_length=result[0]["content_length"],
-                content_summary=result[0]["content_summary"],
-                status=result[0]["status"],
-                chunks_count=result[0]["chunks_count"],
-                created_at=result[0]["created_at"],
-                updated_at=result[0]["updated_at"],
-                file_path=result[0]["file_path"],
-            )
+            return {
+                "id": result[0]["id"],
+                "content": result[0]["content"],
+                "content_summary": result[0]["content_summary"],
+                "content_length": result[0]["content_length"],
+                "status": result[0]["status"],
+                "chunks_count": result[0]["chunks_count"],
+                "created_at": result[0]["created_at"],
+                "updated_at": result[0]["updated_at"],
+                "file_path": result[0].get("file_path", "none"),
+            }
 
     async def get_by_ids(self, ids: list[str]) -> list[dict[str, Any]]:
         """Get doc_chunks data by multiple IDs."""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         if not ids:
             return []
 
@@ -760,20 +988,23 @@ class PGDocStatusStorage(DocStatusStorage):
             return []
         return [
             {
+                "id": row["id"],
                 "content": row["content"],
-                "content_length": row["content_length"],
                 "content_summary": row["content_summary"],
+                "content_length": row["content_length"],
                 "status": row["status"],
                 "chunks_count": row["chunks_count"],
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
-                "file_path": row["file_path"],
+                "file_path": row.get("file_path", "none"),
             }
             for row in results
         ]
 
     async def get_status_counts(self) -> dict[str, int]:
         """Get counts of documents in each status"""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         sql = """SELECT status as "status", COUNT(1) as "count"
                    FROM LIGHTRAG_DOC_STATUS
                   where workspace=$1 GROUP BY STATUS
@@ -784,9 +1015,9 @@ class PGDocStatusStorage(DocStatusStorage):
             counts[doc["status"]] = doc["count"]
         return counts
 
-    async def get_docs_by_status(
-        self, status: DocStatus
-    ) -> dict[str, DocProcessingStatus]:
+    async def get_docs_by_status(self, status: DocStatus) -> dict[str, DocProcessingStatus]:
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         """all documents with a specific status"""
         sql = "select * from LIGHTRAG_DOC_STATUS where workspace=$1 and status=$2"
         params = {"workspace": self.db.workspace, "status": status.value}
@@ -800,7 +1031,7 @@ class PGDocStatusStorage(DocStatusStorage):
                 created_at=element["created_at"],
                 updated_at=element["updated_at"],
                 chunks_count=element["chunks_count"],
-                file_path=element["file_path"],
+                file_path=element.get("file_path", "none"),
             )
             for element in result
         }
@@ -817,6 +1048,8 @@ class PGDocStatusStorage(DocStatusStorage):
             data: dictionary of document IDs and their status data
         """
         logger.info(f"Inserting {len(data)} to {self.namespace}")
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         if not data:
             return
 
@@ -842,12 +1075,75 @@ class PGDocStatusStorage(DocStatusStorage):
                     "content_length": v["content_length"],
                     "chunks_count": v["chunks_count"] if "chunks_count" in v else -1,
                     "status": v["status"],
-                    "file_path": v["file_path"],
+                    "file_path": v.get("file_path", "none"),
                 },
             )
 
+    async def delete(self, ids: list[str]) -> None:
+        """Delete document status records with the specified IDs
+
+        Args:
+            ids: List of document IDs to be deleted
+        """
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
+        if not ids:
+            return
+
+        sql = "DELETE FROM LIGHTRAG_DOC_STATUS WHERE workspace=$1 AND id = ANY($2)"
+        params = {"workspace": self.db.workspace, "ids": ids}
+        try:
+            await self.db.execute(sql, params)
+            logger.debug(f"Deleted {len(ids)} document status records")
+        except Exception as e:
+            logger.error(f"Error deleting document status records: {e}")
+            raise
+
+    async def get_all(self) -> dict[str, dict[str, Any]]:
+        """Get all document status records."""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
+
+        sql = "SELECT * FROM LIGHTRAG_DOC_STATUS WHERE workspace=$1"
+        params = {"workspace": self.db.workspace}
+
+        try:
+            results = await self.db.query(sql, params, multirows=True)
+            if not results:
+                return {}
+
+            return {
+                row["id"]: {
+                    "id": row["id"],
+                    "content": row["content"],
+                    "content_summary": row["content_summary"],
+                    "content_length": row["content_length"],
+                    "status": row["status"],
+                    "chunks_count": row["chunks_count"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "file_path": row.get("file_path", "none"),
+                }
+                for row in results
+            }
+        except Exception as e:
+            logger.error(f"Error getting all document status records: {e}")
+            raise
+
+    async def get_chunks_by_doc_id(self, doc_id: str) -> dict[str, dict[str, Any]]:
+        """Get chunks associated with a document ID.
+
+        Note: This method is required by the interface but doesn't apply directly to DocStatusStorage.
+        It returns an empty dictionary since document status records don't have chunks.
+        """
+        # DocStatusStorage doesn't store chunks, so this method returns an empty dictionary
+        logger.debug(f"get_chunks_by_doc_id called on DocStatusStorage with doc_id={doc_id}")
+        return {}
+
     async def drop(self) -> None:
         """Drop the storage"""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         drop_sql = SQL_TEMPLATES["drop_doc_full"]
         await self.db.execute(drop_sql)
 
@@ -883,6 +1179,8 @@ class PGGraphStorage(BaseGraphStorage):
     async def initialize(self):
         if self.db is None:
             self.db = await ClientManager.get_client()
+        else:
+            await self.db.check_tables()
 
     async def finalize(self):
         if self.db is not None:
@@ -943,9 +1241,7 @@ class PGGraphStorage(BaseGraphStorage):
                             prop = vertex.get("properties")
                             if not prop:
                                 prop = {}
-                            prop["label"] = PGGraphStorage._decode_graph_label(
-                                prop["node_id"]
-                            )
+                            prop["label"] = PGGraphStorage._decode_graph_label(prop["node_id"])
                             dl.append(prop)
                         d[k] = dl
 
@@ -974,9 +1270,7 @@ class PGGraphStorage(BaseGraphStorage):
                         field = vertex.get("properties")
                         if not field:
                             field = {}
-                        field["label"] = PGGraphStorage._decode_graph_label(
-                            field["node_id"]
-                        )
+                        field["label"] = PGGraphStorage._decode_graph_label(field["node_id"])
                         d[k] = field
                     # convert edge from id-label->id by replacing id with node information
                     # we only do this if the vertex was also returned in the query
@@ -991,18 +1285,12 @@ class PGGraphStorage(BaseGraphStorage):
                             vertices.get(edge["end_id"], {}),
                         )
             else:
-                d[k] = (
-                    json.loads(v)
-                    if isinstance(v, str) and ("{" in v or "[" in v)
-                    else v
-                )
+                d[k] = json.loads(v) if isinstance(v, str) and ("{" in v or "[" in v) else v
 
         return d
 
     @staticmethod
-    def _format_properties(
-        properties: dict[str, Any], _id: Union[str, None] = None
-    ) -> str:
+    def _format_properties(properties: dict[str, Any], _id: Union[str, None] = None) -> str:
         """
         Convert a dictionary of properties to a string representation that
         can be used in a cypher query insert/merge statement.
@@ -1020,9 +1308,7 @@ class PGGraphStorage(BaseGraphStorage):
             prop = f"`{k}`: {json.dumps(v)}"
             props.append(prop)
         if _id is not None and "id" not in properties:
-            props.append(
-                f"id: {json.dumps(_id)}" if isinstance(_id, str) else f"id: {_id}"
-            )
+            props.append(f"id: {json.dumps(_id)}" if isinstance(_id, str) else f"id: {_id}")
         return "{" + ", ".join(props) + "}"
 
     @staticmethod
@@ -1192,9 +1478,7 @@ class PGGraphStorage(BaseGraphStorage):
 
         return degrees
 
-    async def get_edge(
-        self, source_node_id: str, target_node_id: str
-    ) -> dict[str, str] | None:
+    async def get_edge(self, source_node_id: str, target_node_id: str) -> dict[str, str] | None:
         src_label = self._encode_graph_label(source_node_id.strip('"'))
         tgt_label = self._encode_graph_label(target_node_id.strip('"'))
 
@@ -1236,14 +1520,10 @@ class PGGraphStorage(BaseGraphStorage):
             connected_node = record["connected"] if record["connected"] else None
 
             source_label = (
-                source_node["node_id"]
-                if source_node and source_node["node_id"]
-                else None
+                source_node["node_id"] if source_node and source_node["node_id"] else None
             )
             target_label = (
-                connected_node["node_id"]
-                if connected_node and connected_node["node_id"]
-                else None
+                connected_node["node_id"] if connected_node and connected_node["node_id"] else None
             )
 
             if source_label and target_label:
@@ -1353,9 +1633,7 @@ class PGGraphStorage(BaseGraphStorage):
         Args:
             node_ids (list[str]): A list of node IDs to remove.
         """
-        encoded_node_ids = [
-            self._encode_graph_label(node_id.strip('"')) for node_id in node_ids
-        ]
+        encoded_node_ids = [self._encode_graph_label(node_id.strip('"')) for node_id in node_ids]
         node_id_list = ", ".join([f'"{node_id}"' for node_id in encoded_node_ids])
 
         query = """SELECT * FROM cypher('%s', $$
@@ -1418,9 +1696,7 @@ class PGGraphStorage(BaseGraphStorage):
 
         return labels
 
-    async def embed_nodes(
-        self, algorithm: str
-    ) -> tuple[np.ndarray[Any, Any], list[str]]:
+    async def embed_nodes(self, algorithm: str) -> tuple[np.ndarray[Any, Any], list[str]]:
         """
         Generate node embeddings using the specified algorithm.
 
@@ -1436,9 +1712,7 @@ class PGGraphStorage(BaseGraphStorage):
         embed_func = self._node_embed_algorithms[algorithm]
         return await embed_func()
 
-    async def get_knowledge_graph(
-        self, node_label: str, max_depth: int = 5
-    ) -> KnowledgeGraph:
+    async def get_knowledge_graph(self, node_label: str, max_depth: int = 5) -> KnowledgeGraph:
         """
         Retrieve a subgraph containing the specified node and its neighbors up to the specified depth.
 
@@ -1717,61 +1991,6 @@ SQL_TEMPLATES = {
                       update_time = CURRENT_TIMESTAMP
                      """,
     # SQL for VectorStorage
-    # "entities": """SELECT entity_name FROM
-    #     (SELECT id, entity_name, 1 - (content_vector <=> '[{embedding_string}]'::vector) as distance
-    #     FROM LIGHTRAG_VDB_ENTITY where workspace=$1)
-    #     WHERE distance>$2 ORDER BY distance DESC  LIMIT $3
-    #    """,
-    # "relationships": """SELECT source_id as src_id, target_id as tgt_id FROM
-    #     (SELECT id, source_id,target_id, 1 - (content_vector <=> '[{embedding_string}]'::vector) as distance
-    #     FROM LIGHTRAG_VDB_RELATION where workspace=$1)
-    #     WHERE distance>$2 ORDER BY distance DESC  LIMIT $3
-    #    """,
-    # "chunks": """SELECT id FROM
-    #     (SELECT id, 1 - (content_vector <=> '[{embedding_string}]'::vector) as distance
-    #     FROM LIGHTRAG_DOC_CHUNKS where workspace=$1)
-    #     WHERE distance>$2 ORDER BY distance DESC  LIMIT $3
-    #    """,
-    # DROP tables
-    "drop_all": """
-	    DROP TABLE IF EXISTS LIGHTRAG_DOC_FULL CASCADE;
-	    DROP TABLE IF EXISTS LIGHTRAG_DOC_CHUNKS CASCADE;
-	    DROP TABLE IF EXISTS LIGHTRAG_LLM_CACHE CASCADE;
-	    DROP TABLE IF EXISTS LIGHTRAG_VDB_ENTITY CASCADE;
-	    DROP TABLE IF EXISTS LIGHTRAG_VDB_RELATION CASCADE;
-       """,
-    "drop_doc_full": """
-	    DROP TABLE IF EXISTS LIGHTRAG_DOC_FULL CASCADE;
-       """,
-    "drop_doc_chunks": """
-	    DROP TABLE IF EXISTS LIGHTRAG_DOC_CHUNKS CASCADE;
-       """,
-    "drop_llm_cache": """
-	    DROP TABLE IF EXISTS LIGHTRAG_LLM_CACHE CASCADE;
-       """,
-    "drop_vdb_entity": """
-	    DROP TABLE IF EXISTS LIGHTRAG_VDB_ENTITY CASCADE;
-       """,
-    "drop_vdb_relation": """
-	    DROP TABLE IF EXISTS LIGHTRAG_VDB_RELATION CASCADE;
-       """,
-    "relationships": """
-    WITH relevant_chunks AS (
-        SELECT id as chunk_id
-        FROM LIGHTRAG_DOC_CHUNKS
-        WHERE {doc_ids} IS NULL OR full_doc_id = ANY(ARRAY[{doc_ids}])
-    )
-    SELECT source_id as src_id, target_id as tgt_id
-    FROM (
-        SELECT r.id, r.source_id, r.target_id, 1 - (r.content_vector <=> '[{embedding_string}]'::vector) as distance
-        FROM LIGHTRAG_VDB_RELATION r
-        JOIN relevant_chunks c ON c.chunk_id = ANY(r.chunk_ids)
-        WHERE r.workspace=$1
-    ) filtered
-    WHERE distance>$2
-    ORDER BY distance DESC
-    LIMIT $3
-    """,
     "entities": """
         WITH relevant_chunks AS (
             SELECT id as chunk_id
@@ -1784,10 +2003,27 @@ SQL_TEMPLATES = {
                 FROM LIGHTRAG_VDB_ENTITY e
                 JOIN relevant_chunks c ON c.chunk_id = ANY(e.chunk_ids)
                 WHERE e.workspace=$1
-            )
+            ) as entity_distances
         WHERE distance>$2
         ORDER BY distance DESC
         LIMIT $3
+    """,
+    "relationships": """
+    WITH relevant_chunks AS (
+        SELECT id as chunk_id
+        FROM LIGHTRAG_DOC_CHUNKS
+        WHERE {doc_ids} IS NULL OR full_doc_id = ANY(ARRAY[{doc_ids}])
+    )
+    SELECT source_id as src_id, target_id as tgt_id
+    FROM (
+        SELECT r.id, r.source_id, r.target_id, 1 - (r.content_vector <=> '[{embedding_string}]'::vector) as distance
+        FROM LIGHTRAG_VDB_RELATION r
+        JOIN relevant_chunks c ON c.chunk_id = ANY(r.chunk_ids)
+        WHERE r.workspace=$1
+    ) as relation_distances
+    WHERE distance>$2
+    ORDER BY distance DESC
+    LIMIT $3
     """,
     "chunks": """
         WITH relevant_chunks AS (
@@ -1806,4 +2042,28 @@ SQL_TEMPLATES = {
             ORDER BY distance DESC
             LIMIT $3
     """,
+    # DROP tables
+    "drop_all": """
+	    DROP TABLE IF EXISTS LIGHTRAG_DOC_FULL CASCADE;
+	    DROP TABLE IF EXISTS LIGHTRAG_DOC_CHUNKS CASCADE;
+	    DROP TABLE IF EXISTS LIGHTRAG_LLM_CACHE CASCADE;
+	    DROP TABLE IF EXISTS LIGHTRAG_VDB_ENTITY CASCADE;
+	    DROP TABLE IF EXISTS LIGHTRAG_VDB_RELATION CASCADE;
+       """,
+    "drop_doc_full": """
+	    DROP TABLE IF EXISTS LIGHTRAG_DOC_FULL CASCADE;
+        DROP TABLE IF EXISTS LIGHTRAG_DOC_STATUS CASCADE;
+       """,
+    "drop_doc_chunks": """
+	    DROP TABLE IF EXISTS LIGHTRAG_DOC_CHUNKS CASCADE;
+       """,
+    "drop_llm_cache": """
+	    DROP TABLE IF EXISTS LIGHTRAG_LLM_CACHE CASCADE;
+       """,
+    "drop_vdb_entity": """
+	    DROP TABLE IF EXISTS LIGHTRAG_VDB_ENTITY CASCADE;
+       """,
+    "drop_vdb_relation": """
+	    DROP TABLE IF EXISTS LIGHTRAG_VDB_RELATION CASCADE;
+       """,
 }

@@ -163,7 +163,7 @@ For each relationship between entities, extract:
 - relationship_strength: a numeric score indicating strength of the relationship (1-10)
 Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
 
-3. Identify high-level key words that summarize the main concepts, themes, or topics of the entire research. 
+3. Identify high-level key words that summarize the main concepts, themes, or topics of the entire research.
 Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
 
 Return output in {language} as a single list of all the entities and relationships. Use **{record_delimiter}** as the list delimiter.

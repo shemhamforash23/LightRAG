@@ -58,7 +58,9 @@ Output:
 """
 
 # Промпт для ответа при ошибке
-PROMPTS["fail_response"] = "Sorry, I'm not able to provide an answer to that question.[no-context]"
+PROMPTS["fail_response"] = (
+    "Sorry, I'm not able to provide an answer to that question.[no-context]"
+)
 
 # Промпт для ответа на основе базы знаний
 PROMPTS["rag_response"] = """---Role---
@@ -214,7 +216,9 @@ When handling content with timestamps:
 - Do not include information not provided by the Document Chunks."""
 
 # Промпт для проверки схожести запросов
-PROMPTS["similarity_check"] = """Please analyze the similarity between these two questions:
+PROMPTS[
+    "similarity_check"
+] = """Please analyze the similarity between these two questions:
 
 Question 1: {original_prompt}
 Question 2: {cached_prompt}
@@ -309,7 +313,9 @@ def load_mode_prompts() -> None:
         # Параметр 'package' здесь крайне важен
         prompt_module = importlib.import_module(module_name, package="lightrag")
 
-        if hasattr(prompt_module, "PROMPTS") and isinstance(prompt_module.PROMPTS, dict):
+        if hasattr(prompt_module, "PROMPTS") and isinstance(
+            prompt_module.PROMPTS, dict
+        ):
             # Обновляем глобальный словарь PROMPTS соответствующими промптами из модуля
             # Сохраняя при этом базовые промпты, определенные выше
             mode_prompts = prompt_module.PROMPTS

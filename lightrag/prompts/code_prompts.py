@@ -71,18 +71,18 @@ class DataProcessor:
     def __init__(self, data_path):
         self.data_path = data_path
         self.data = None
-    
+
     def load_data(self):
         self.data = np.loadtxt(self.data_path, delimiter=',')
         return self.data
-    
+
     def preprocess(self, normalize=True):
         if self.data is None:
             self.load_data()
-        
+
         if normalize:
             self.data = (self.data - np.mean(self.data, axis=0)) / np.std(self.data, axis=0)
-        
+
         return self.data
 
 def split_dataset(data, test_size=0.2, random_state=42):
@@ -119,13 +119,13 @@ import os
 
 class AuthService:
     \"\"\"\"\"\Service for handling authentication operations\"\"\"\"\"
-    
+
     def __init__(self, base_url: str):
         \"\"\"\"\"\Initialize the auth service with base URL\"\"\"\"\"
         self.base_url = base_url
         self.session = requests.Session()
         self.current_user_key = "AUTH_CURRENT_USER"
-    
+
     def login(self, username: str, password: str) -> Dict[str, Any]:
         \"\"\"\"\"\Login a user and store their credentials\"\"\"\"\"
         response = self.session.post(
@@ -134,21 +134,21 @@ class AuthService:
         )
         response.raise_for_status()
         user_data = response.json()
-        
+
         # Store user in environment variable
         os.environ[self.current_user_key] = json.dumps(user_data)
-        
+
         return user_data
-    
+
     def logout(self) -> bool:
         \"\"\"\"\"\Logout the current user\"\"\"\"\"
         # Clear user from environment
         if self.current_user_key in os.environ:
             del os.environ[self.current_user_key]
-            
+
         response = self.session.post(f"{self.base_url}/auth/logout")
         return response.status_code == 200
-    
+
     def get_current_user(self) -> Optional[Dict[str, Any]]:
         \"\"\"\"\"\Get the current logged-in user\"\"\"\"\"
         user_data = os.environ.get(self.current_user_key)
@@ -198,7 +198,7 @@ For each relationship between entities, extract:
 - relationship_strength: a numeric score indicating strength of the relationship
 Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
 
-3. Identify high-level key words that summarize the main concepts, themes, or topics of the entire code. 
+3. Identify high-level key words that summarize the main concepts, themes, or topics of the entire code.
 Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
 
 Return output in {language} as a single list of all the entities and relationships. Use **{record_delimiter}** as the list delimiter.

@@ -109,7 +109,9 @@ class PostgreSQLDB:
                 try:
                     logger.info(f"PostgreSQL, Try Creating table {k} in database")
                     await self.execute(v["ddl"])
-                    logger.info(f"PostgreSQL, Creation success table {k} in PostgreSQL database")
+                    logger.info(
+                        f"PostgreSQL, Creation success table {k} in PostgreSQL database"
+                    )
                 except Exception as e:
                     logger.error(
                         f"PostgreSQL, Failed to create table {k} in database, Please verify the connection with PostgreSQL database, Got: {e}"
@@ -201,8 +203,12 @@ class ClientManager:
                 "POSTGRES_HOST",
                 config.get("postgres", "host", fallback="localhost"),
             ),
-            "port": os.environ.get("POSTGRES_PORT", config.get("postgres", "port", fallback=5432)),
-            "user": os.environ.get("POSTGRES_USER", config.get("postgres", "user", fallback=None)),
+            "port": os.environ.get(
+                "POSTGRES_PORT", config.get("postgres", "port", fallback=5432)
+            ),
+            "user": os.environ.get(
+                "POSTGRES_USER", config.get("postgres", "user", fallback=None)
+            ),
             "password": os.environ.get(
                 "POSTGRES_PASSWORD",
                 config.get("postgres", "password", fallback=None),
@@ -354,7 +360,9 @@ class PGKVStorage(BaseKVStorage):
             new_keys = set([s for s in keys if s not in exist_keys])
             return new_keys
         except Exception as e:
-            logger.error(f"PostgreSQL database,\nsql:{sql},\nparams:{params},\nerror:{e}")
+            logger.error(
+                f"PostgreSQL database,\nsql:{sql},\nparams:{params},\nerror:{e}"
+            )
             raise
 
     async def get_all(self) -> dict[str, dict[str, Any]]:
@@ -402,7 +410,9 @@ class PGKVStorage(BaseKVStorage):
         if self.db is None:
             raise ValueError("Database connection not initialized")
         if not is_namespace(self.namespace, NameSpace.KV_STORE_TEXT_CHUNKS):
-            logger.warning(f"get_chunks_by_doc_id called on non-chunks namespace: {self.namespace}")
+            logger.warning(
+                f"get_chunks_by_doc_id called on non-chunks namespace: {self.namespace}"
+            )
             return {}
 
         table_name = namespace_to_table_name(self.namespace)
@@ -413,8 +423,8 @@ class PGKVStorage(BaseKVStorage):
         # Query to find chunks with matching full_doc_id
         sql = f"""
         SELECT id, content, full_doc_id, tokens, chunk_order_index, file_path
-        FROM {table_name} 
-        WHERE workspace=$1 
+        FROM {table_name}
+        WHERE workspace=$1
         AND full_doc_id = $2
         """
         params = {"workspace": self.db.workspace, "full_doc_id": doc_id}
@@ -459,11 +469,15 @@ class PGKVStorage(BaseKVStorage):
             return
 
         ids_list = ",".join([f"'{id}'" for id in ids])
-        delete_sql = f"DELETE FROM {table_name} WHERE workspace=$1 AND id IN ({ids_list})"
+        delete_sql = (
+            f"DELETE FROM {table_name} WHERE workspace=$1 AND id IN ({ids_list})"
+        )
 
         try:
             await self.db.execute(delete_sql, {"workspace": self.db.workspace})
-            logger.debug(f"Successfully deleted {len(ids)} records from {self.namespace}")
+            logger.debug(
+                f"Successfully deleted {len(ids)} records from {self.namespace}"
+            )
         except Exception as e:
             logger.error(f"Error while deleting records from {self.namespace}: {e}")
 
@@ -694,11 +708,15 @@ class PGVectorStorage(BaseVectorStorage):
             return
 
         ids_list = ",".join([f"'{id}'" for id in ids])
-        delete_sql = f"DELETE FROM {table_name} WHERE workspace=$1 AND id IN ({ids_list})"
+        delete_sql = (
+            f"DELETE FROM {table_name} WHERE workspace=$1 AND id IN ({ids_list})"
+        )
 
         try:
             await self.db.execute(delete_sql, {"workspace": self.db.workspace})
-            logger.debug(f"Successfully deleted {len(ids)} vectors from {self.namespace}")
+            logger.debug(
+                f"Successfully deleted {len(ids)} vectors from {self.namespace}"
+            )
         except Exception as e:
             logger.error(f"Error while deleting vectors from {self.namespace}: {e}")
 
@@ -861,8 +879,8 @@ class PGVectorStorage(BaseVectorStorage):
 
         # Query to find entities that reference the source_id
         sql = f"""
-        SELECT * FROM {table_name} 
-        WHERE workspace=$1 
+        SELECT * FROM {table_name}
+        WHERE workspace=$1
         AND $2 = ANY(chunk_ids)
         """
         params = {
@@ -896,13 +914,15 @@ class PGVectorStorage(BaseVectorStorage):
 
         table_name = namespace_to_table_name(self.namespace)
         if not table_name:
-            logger.error(f"Unknown namespace for getting relationships: {self.namespace}")
+            logger.error(
+                f"Unknown namespace for getting relationships: {self.namespace}"
+            )
             return []
 
         # Query to find relationships that reference the source_id
         sql = f"""
-        SELECT * FROM {table_name} 
-        WHERE workspace=$1 
+        SELECT * FROM {table_name}
+        WHERE workspace=$1
         AND $2 = ANY(chunk_ids)
         """
         params = {
@@ -914,7 +934,9 @@ class PGVectorStorage(BaseVectorStorage):
             results = await self.db.query(sql, params, multirows=True)
             return results if results else []
         except Exception as e:
-            logger.error(f"Error while getting relationships for source_id {source_id}: {e}")
+            logger.error(
+                f"Error while getting relationships for source_id {source_id}: {e}"
+            )
             return []
 
 
@@ -954,7 +976,9 @@ class PGDocStatusStorage(DocStatusStorage):
             print(f"new_keys: {new_keys}")
             return new_keys
         except Exception as e:
-            logger.error(f"PostgreSQL database,\nsql:{sql},\nparams:{params},\nerror:{e}")
+            logger.error(
+                f"PostgreSQL database,\nsql:{sql},\nparams:{params},\nerror:{e}"
+            )
             raise
 
     async def get_by_id(self, id: str) -> Union[dict[str, Any], None]:
@@ -1021,7 +1045,9 @@ class PGDocStatusStorage(DocStatusStorage):
             counts[doc["status"]] = doc["count"]
         return counts
 
-    async def get_docs_by_status(self, status: DocStatus) -> dict[str, DocProcessingStatus]:
+    async def get_docs_by_status(
+        self, status: DocStatus
+    ) -> dict[str, DocProcessingStatus]:
         if self.db is None:
             raise ValueError("Database connection not initialized")
         """all documents with a specific status"""
@@ -1143,7 +1169,9 @@ class PGDocStatusStorage(DocStatusStorage):
         It returns an empty dictionary since document status records don't have chunks.
         """
         # DocStatusStorage doesn't store chunks, so this method returns an empty dictionary
-        logger.debug(f"get_chunks_by_doc_id called on DocStatusStorage with doc_id={doc_id}")
+        logger.debug(
+            f"get_chunks_by_doc_id called on DocStatusStorage with doc_id={doc_id}"
+        )
         return {}
 
     async def drop(self) -> None:
@@ -1247,7 +1275,9 @@ class PGGraphStorage(BaseGraphStorage):
                             prop = vertex.get("properties")
                             if not prop:
                                 prop = {}
-                            prop["label"] = PGGraphStorage._decode_graph_label(prop["node_id"])
+                            prop["label"] = PGGraphStorage._decode_graph_label(
+                                prop["node_id"]
+                            )
                             dl.append(prop)
                         d[k] = dl
 
@@ -1276,7 +1306,9 @@ class PGGraphStorage(BaseGraphStorage):
                         field = vertex.get("properties")
                         if not field:
                             field = {}
-                        field["label"] = PGGraphStorage._decode_graph_label(field["node_id"])
+                        field["label"] = PGGraphStorage._decode_graph_label(
+                            field["node_id"]
+                        )
                         d[k] = field
                     # convert edge from id-label->id by replacing id with node information
                     # we only do this if the vertex was also returned in the query
@@ -1291,12 +1323,18 @@ class PGGraphStorage(BaseGraphStorage):
                             vertices.get(edge["end_id"], {}),
                         )
             else:
-                d[k] = json.loads(v) if isinstance(v, str) and ("{" in v or "[" in v) else v
+                d[k] = (
+                    json.loads(v)
+                    if isinstance(v, str) and ("{" in v or "[" in v)
+                    else v
+                )
 
         return d
 
     @staticmethod
-    def _format_properties(properties: dict[str, Any], _id: Union[str, None] = None) -> str:
+    def _format_properties(
+        properties: dict[str, Any], _id: Union[str, None] = None
+    ) -> str:
         """
         Convert a dictionary of properties to a string representation that
         can be used in a cypher query insert/merge statement.
@@ -1314,7 +1352,9 @@ class PGGraphStorage(BaseGraphStorage):
             prop = f"`{k}`: {json.dumps(v)}"
             props.append(prop)
         if _id is not None and "id" not in properties:
-            props.append(f"id: {json.dumps(_id)}" if isinstance(_id, str) else f"id: {_id}")
+            props.append(
+                f"id: {json.dumps(_id)}" if isinstance(_id, str) else f"id: {_id}"
+            )
         return "{" + ", ".join(props) + "}"
 
     @staticmethod
@@ -1486,7 +1526,9 @@ class PGGraphStorage(BaseGraphStorage):
 
         return degrees
 
-    async def get_edge(self, source_node_id: str, target_node_id: str) -> dict[str, str] | None:
+    async def get_edge(
+        self, source_node_id: str, target_node_id: str
+    ) -> dict[str, str] | None:
         src_label = self._encode_graph_label(source_node_id.strip('"'))
         tgt_label = self._encode_graph_label(target_node_id.strip('"'))
 
@@ -1528,10 +1570,14 @@ class PGGraphStorage(BaseGraphStorage):
             connected_node = record["connected"] if record["connected"] else None
 
             source_label = (
-                source_node["node_id"] if source_node and source_node["node_id"] else None
+                source_node["node_id"]
+                if source_node and source_node["node_id"]
+                else None
             )
             target_label = (
-                connected_node["node_id"] if connected_node and connected_node["node_id"] else None
+                connected_node["node_id"]
+                if connected_node and connected_node["node_id"]
+                else None
             )
 
             if source_label and target_label:
@@ -1641,7 +1687,9 @@ class PGGraphStorage(BaseGraphStorage):
         Args:
             node_ids (list[str]): A list of node IDs to remove.
         """
-        encoded_node_ids = [self._encode_graph_label(node_id.strip('"')) for node_id in node_ids]
+        encoded_node_ids = [
+            self._encode_graph_label(node_id.strip('"')) for node_id in node_ids
+        ]
         node_id_list = ", ".join([f'"{node_id}"' for node_id in encoded_node_ids])
 
         query = """SELECT * FROM cypher('%s', $$
@@ -1704,7 +1752,9 @@ class PGGraphStorage(BaseGraphStorage):
 
         return labels
 
-    async def embed_nodes(self, algorithm: str) -> tuple[np.ndarray[Any, Any], list[str]]:
+    async def embed_nodes(
+        self, algorithm: str
+    ) -> tuple[np.ndarray[Any, Any], list[str]]:
         """
         Generate node embeddings using the specified algorithm.
 
@@ -1721,7 +1771,11 @@ class PGGraphStorage(BaseGraphStorage):
         return await embed_func()
 
     async def get_knowledge_graph(
-        self, node_label: str, max_depth: int = 3, min_degree: int = 0, inclusive: bool = False
+        self,
+        node_label: str,
+        max_depth: int = 3,
+        min_degree: int = 0,
+        inclusive: bool = False,
     ) -> KnowledgeGraph:
         """
         Retrieve a subgraph containing the specified node and its neighbors up to the specified depth.

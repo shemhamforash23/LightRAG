@@ -43,12 +43,20 @@ config.read("config.ini", "utf-8")
 MAX_GRAPH_NODES = int(os.getenv("MAX_GRAPH_NODES", 1000))
 
 # Default values for timeouts and thresholds
-DEFAULT_NEO4J_OPERATION_TIMEOUT = float(os.environ.get("NEO4J_OPERATION_TIMEOUT", 30))  # seconds
-DEFAULT_LONG_TX_THRESHOLD = float(os.environ.get("NEO4J_LONG_TX_THRESHOLD", 10))  # seconds
+DEFAULT_NEO4J_OPERATION_TIMEOUT = float(
+    os.environ.get("NEO4J_OPERATION_TIMEOUT", 30)
+)  # seconds
+DEFAULT_LONG_TX_THRESHOLD = float(
+    os.environ.get("NEO4J_LONG_TX_THRESHOLD", 10)
+)  # seconds
 
 # Default values for queue and worker pool
-DEFAULT_NEO4J_WORKER_COUNT = int(os.environ.get("NEO4J_WORKER_COUNT", 10))  # number of workers
-DEFAULT_NEO4J_QUEUE_SIZE = int(os.environ.get("NEO4J_QUEUE_SIZE", 1000))  # max queue size
+DEFAULT_NEO4J_WORKER_COUNT = int(
+    os.environ.get("NEO4J_WORKER_COUNT", 10)
+)  # number of workers
+DEFAULT_NEO4J_QUEUE_SIZE = int(
+    os.environ.get("NEO4J_QUEUE_SIZE", 1000)
+)  # max queue size
 DEFAULT_NEO4J_DEFAULT_PRIORITY = int(
     os.environ.get("NEO4J_DEFAULT_PRIORITY", 100)
 )  # default priority
@@ -115,14 +123,20 @@ async def neo4j_worker(
             try:
                 # Get timeout from object attribute or use default value
                 operation_timeout = getattr(
-                    task.instance, "NEO4J_OPERATION_TIMEOUT", DEFAULT_NEO4J_OPERATION_TIMEOUT
+                    task.instance,
+                    "NEO4J_OPERATION_TIMEOUT",
+                    DEFAULT_NEO4J_OPERATION_TIMEOUT,
                 )
                 long_tx_threshold = getattr(
-                    task.instance, "LONG_TRANSACTION_THRESHOLD", DEFAULT_LONG_TX_THRESHOLD
+                    task.instance,
+                    "LONG_TRANSACTION_THRESHOLD",
+                    DEFAULT_LONG_TX_THRESHOLD,
                 )
 
                 # Get function name for logging
-                operation_name = f"{task.func.__name__}({', '.join(map(str, task.args))})"
+                operation_name = (
+                    f"{task.func.__name__}({', '.join(map(str, task.args))})"
+                )
 
                 logger.debug(
                     f"Worker {worker_id}: Starting task {task.id} - {operation_name}, "
@@ -136,9 +150,13 @@ async def neo4j_worker(
 
                 try:
                     # Acquire semaphore
-                    logger.debug(f"Worker {worker_id}: Waiting for semaphore for task {task.id}")
+                    logger.debug(
+                        f"Worker {worker_id}: Waiting for semaphore for task {task.id}"
+                    )
                     async with semaphore:
-                        logger.debug(f"Worker {worker_id}: Acquired semaphore for task {task.id}")
+                        logger.debug(
+                            f"Worker {worker_id}: Acquired semaphore for task {task.id}"
+                        )
 
                         # Add random delay if system is under high load
                         if random.random() < 0.3:  # 30% chance to add delay
@@ -169,7 +187,9 @@ async def neo4j_worker(
 
                         # Set result in future
                         task.future.set_result(result)
-                        logger.debug(f"Worker {worker_id}: Task {task.id} completed successfully")
+                        logger.debug(
+                            f"Worker {worker_id}: Task {task.id} completed successfully"
+                        )
 
                 except asyncio.TimeoutError:
                     logger.error(
@@ -194,7 +214,9 @@ async def neo4j_worker(
                         monitor_task.cancel()
 
             except Exception as e:
-                logger.error(f"Worker {worker_id}: Error processing task {task.id}: {str(e)}")
+                logger.error(
+                    f"Worker {worker_id}: Error processing task {task.id}: {str(e)}"
+                )
                 if not task.future.done():
                     task.future.set_exception(e)
 
@@ -226,7 +248,9 @@ def with_semaphore(func):
     async def wrapper(self, *args, **kwargs):
         # Check if workers are started
         if not self._workers_started:
-            raise RuntimeError("Neo4j workers are not started. Make sure initialize() was called.")
+            raise RuntimeError(
+                "Neo4j workers are not started. Make sure initialize() was called."
+            )
 
         # Get priority from kwargs or use default value
         priority = kwargs.pop("priority", DEFAULT_NEO4J_DEFAULT_PRIORITY)
@@ -283,13 +307,19 @@ class Neo4JStorage(BaseGraphStorage):
         self.NEO4J_OPERATION_TIMEOUT = float(
             os.environ.get(
                 "NEO4J_OPERATION_TIMEOUT",
-                config.get("neo4j", "operation_timeout", fallback=DEFAULT_NEO4J_OPERATION_TIMEOUT),
+                config.get(
+                    "neo4j",
+                    "operation_timeout",
+                    fallback=DEFAULT_NEO4J_OPERATION_TIMEOUT,
+                ),
             )
         )
         self.LONG_TRANSACTION_THRESHOLD = float(
             os.environ.get(
                 "NEO4J_LONG_TX_THRESHOLD",
-                config.get("neo4j", "long_tx_threshold", fallback=DEFAULT_LONG_TX_THRESHOLD),
+                config.get(
+                    "neo4j", "long_tx_threshold", fallback=DEFAULT_LONG_TX_THRESHOLD
+                ),
             )
         )
 
@@ -297,7 +327,9 @@ class Neo4JStorage(BaseGraphStorage):
         self.NEO4J_WORKER_COUNT = int(
             os.environ.get(
                 "NEO4J_WORKER_COUNT",
-                config.get("neo4j", "worker_count", fallback=DEFAULT_NEO4J_WORKER_COUNT),
+                config.get(
+                    "neo4j", "worker_count", fallback=DEFAULT_NEO4J_WORKER_COUNT
+                ),
             )
         )
         self.NEO4J_QUEUE_SIZE = int(
@@ -316,7 +348,9 @@ class Neo4JStorage(BaseGraphStorage):
         self._workers = []
         self._workers_started = False
 
-        logger.info(f"Initialized Neo4j storage with queue size {self.NEO4J_QUEUE_SIZE}")
+        logger.info(
+            f"Initialized Neo4j storage with queue size {self.NEO4J_QUEUE_SIZE}"
+        )
 
         self.URI = os.environ.get("NEO4J_URI", config.get("neo4j", "uri", fallback=""))
         self.USERNAME = os.environ.get(
@@ -349,7 +383,9 @@ class Neo4JStorage(BaseGraphStorage):
                 config.get("neo4j", "max_transaction_retry_time", fallback=30.0),
             ),
         )
-        self.DATABASE = os.environ.get("NEO4J_DATABASE", re.sub(r"[^a-zA-Z0-9-]", "-", namespace))
+        self.DATABASE = os.environ.get(
+            "NEO4J_DATABASE", re.sub(r"[^a-zA-Z0-9-]", "-", namespace)
+        )
 
         self._driver: AsyncDriver = AsyncGraphDatabase.driver(
             self.URI,
@@ -403,7 +439,9 @@ class Neo4JStorage(BaseGraphStorage):
                             logger.info(f"Connected to {database} at {self.URI}")
                             connected = True
                         except neo4jExceptions.ServiceUnavailable as e:
-                            logger.error(f"{database} at {self.URI} is not available".capitalize())
+                            logger.error(
+                                f"{database} at {self.URI} is not available".capitalize()
+                            )
                             raise e
                 except neo4jExceptions.AuthError as e:
                     logger.error(f"Authentication failed for {database} at {self.URI}")
@@ -415,8 +453,12 @@ class Neo4JStorage(BaseGraphStorage):
                         )
                         try:
                             with _sync_driver.session() as session:
-                                session.run(f"CREATE DATABASE `{database}` IF NOT EXISTS")
-                                logger.info(f"{database} at {self.URI} created".capitalize())
+                                session.run(
+                                    f"CREATE DATABASE `{database}` IF NOT EXISTS"
+                                )
+                                logger.info(
+                                    f"{database} at {self.URI} created".capitalize()
+                                )
                                 connected = True
                         except (
                             neo4jExceptions.ClientError,
@@ -425,13 +467,17 @@ class Neo4JStorage(BaseGraphStorage):
                             if (
                                 e.code
                                 == "Neo.ClientError.Statement.UnsupportedAdministrationCommand"
-                            ) or (e.code == "Neo.DatabaseError.Statement.ExecutionFailed"):
+                            ) or (
+                                e.code == "Neo.DatabaseError.Statement.ExecutionFailed"
+                            ):
                                 if database is not None:
                                     logger.warning(
                                         "This Neo4j instance does not support creating databases. Try to use Neo4j Desktop/Enterprise version or DozerDB instead. Fallback to use the default database."
                                     )
                             if database is None:
-                                logger.error(f"Failed to create {database} at {self.URI}")
+                                logger.error(
+                                    f"Failed to create {database} at {self.URI}"
+                                )
                                 raise e
 
                 if connected:
@@ -457,7 +503,9 @@ class Neo4JStorage(BaseGraphStorage):
             if labels:
                 # Remove all nodes (this will also remove all relationships)
                 await self.remove_nodes(labels)
-                logger.info(f"Successfully cleared all data from Neo4j database {self._DATABASE}")
+                logger.info(
+                    f"Successfully cleared all data from Neo4j database {self._DATABASE}"
+                )
             else:
                 logger.info(f"No data to clear from Neo4j database {self._DATABASE}")
 
@@ -487,7 +535,9 @@ class Neo4JStorage(BaseGraphStorage):
                 query = "MATCH (n:base {entity_id: $entity_id}) RETURN count(n) > 0 AS node_exists"
                 result = await session.run(query, entity_id=node_id)
                 single_result = await result.single()
-                assert single_result is not None, f"Failed to check node existence for {node_id}"
+                assert (
+                    single_result is not None
+                ), f"Failed to check node existence for {node_id}"
                 await result.consume()  # Ensure result is fully consumed
                 return single_result["node_exists"]
             except Exception as e:
@@ -525,9 +575,9 @@ class Neo4JStorage(BaseGraphStorage):
                     target_entity_id=target_node_id,
                 )
                 single_result = await result.single()
-                assert single_result is not None, (
-                    f"Failed to check edge existence between {source_node_id} and {target_node_id}"
-                )
+                assert (
+                    single_result is not None
+                ), f"Failed to check edge existence between {source_node_id} and {target_node_id}"
                 await result.consume()  # Ensure result is fully consumed
                 return single_result["edgeExists"]
             except Exception as e:
@@ -556,7 +606,9 @@ class Neo4JStorage(BaseGraphStorage):
                     query = "MATCH (n:base {entity_id: $entity_id}) RETURN n"
                     result = await session.run(query, entity_id=node_id)
                     try:
-                        records = await result.fetch(2)  # Get 2 records for duplication check
+                        records = await result.fetch(
+                            2
+                        )  # Get 2 records for duplication check
 
                         if len(records) > 1:
                             logger.warning(
@@ -568,9 +620,13 @@ class Neo4JStorage(BaseGraphStorage):
                             # Remove base label from labels list if it exists
                             if "labels" in node_dict:
                                 node_dict["labels"] = [
-                                    label for label in node_dict["labels"] if label != "base"
+                                    label
+                                    for label in node_dict["labels"]
+                                    if label != "base"
                                 ]
-                            logger.debug(f"Neo4j query node {query} return: {node_dict}")
+                            logger.debug(
+                                f"Neo4j query node {query} return: {node_dict}"
+                            )
                             return node_dict
                         return None
                     finally:
@@ -617,7 +673,9 @@ class Neo4JStorage(BaseGraphStorage):
                             return 0
 
                         degree = record["degree"]
-                        logger.debug(f"Neo4j query node degree for {node_id} return: {degree}")
+                        logger.debug(
+                            f"Neo4j query node degree for {node_id} return: {degree}"
+                        )
                         return degree
                     finally:
                         await result.consume()  # Ensure result is fully consumed
@@ -650,11 +708,11 @@ class Neo4JStorage(BaseGraphStorage):
                     MATCH (src:base {entity_id: $src_id})
                     OPTIONAL MATCH (src)-[r1]-()
                     WITH COUNT(r1) AS src_degree
-                    
+
                     MATCH (tgt:base {entity_id: $tgt_id})
                     OPTIONAL MATCH (tgt)-[r2]-()
                     WITH src_degree, COUNT(r2) AS tgt_degree
-                    
+
                     RETURN src_degree + tgt_degree AS total_degree
                 """
                 result = await session.run(query, src_id=src_id, tgt_id=tgt_id)
@@ -662,7 +720,9 @@ class Neo4JStorage(BaseGraphStorage):
                     record = await result.single()
 
                     if not record:
-                        logger.warning(f"No nodes found for edge degree '{src_id}' to '{tgt_id}'")
+                        logger.warning(
+                            f"No nodes found for edge degree '{src_id}' to '{tgt_id}'"
+                        )
                         return 0
 
                     total_degree = record["total_degree"]
@@ -678,7 +738,9 @@ class Neo4JStorage(BaseGraphStorage):
             return 0
 
     @with_semaphore
-    async def get_edge(self, source_node_id: str, target_node_id: str) -> dict[str, str] | None:
+    async def get_edge(
+        self, source_node_id: str, target_node_id: str
+    ) -> dict[str, str] | None:
         """Get the properties of the edge between two nodes.
 
         Args:
@@ -705,10 +767,13 @@ class Neo4JStorage(BaseGraphStorage):
                     record = await result.single()
                     if record and record["edge_properties"]:
                         edge_properties = record["edge_properties"]
-                        logger.debug(f"get_edge:query:\n{query}\n:result:{edge_properties}")
+                        logger.debug(
+                            f"get_edge:query:\n{query}\n:result:{edge_properties}"
+                        )
                         # Convert all values to strings for consistent handling
                         return {
-                            k: str(v) if v is not None else "" for k, v in edge_properties.items()
+                            k: str(v) if v is not None else ""
+                            for k, v in edge_properties.items()
                         }
                     else:
                         # Return default edge properties when no edge found
@@ -793,10 +858,14 @@ class Neo4JStorage(BaseGraphStorage):
                     finally:
                         await results.consume()  # Ensure results are consumed
                 except Exception as e:
-                    logger.error(f"Error getting edges for node {source_node_id}: {str(e)}")
+                    logger.error(
+                        f"Error getting edges for node {source_node_id}: {str(e)}"
+                    )
                     return []  # Return empty list instead of raising
         except Exception as e:
-            logger.error(f"Session error in get_node_edges for {source_node_id}: {str(e)}")
+            logger.error(
+                f"Session error in get_node_edges for {source_node_id}: {str(e)}"
+            )
             return []  # Return empty list instead of raising
 
     @retry(
@@ -1063,12 +1132,16 @@ class Neo4JStorage(BaseGraphStorage):
             except neo4jExceptions.ClientError as e:
                 logger.warning(f"APOC plugin error: {str(e)}")
                 if node_label != "*":
-                    logger.warning("Neo4j: falling back to basic Cypher recursive search...")
+                    logger.warning(
+                        "Neo4j: falling back to basic Cypher recursive search..."
+                    )
                     if inclusive:
                         logger.warning(
                             "Neo4j: inclusive search mode is not supported in recursive query, using exact matching"
                         )
-                    return await self._robust_fallback(node_label, max_depth, min_degree)
+                    return await self._robust_fallback(
+                        node_label, max_depth, min_degree
+                    )
 
         return result
 
@@ -1114,7 +1187,9 @@ class Neo4JStorage(BaseGraphStorage):
                 results = await session.run(query, entity_id=node.id)
 
                 # Get all records and release database connection
-                records = await results.fetch(1000)  # Max neighbour nodes we can handled
+                records = await results.fetch(
+                    1000
+                )  # Max neighbour nodes we can handled
                 await results.consume()  # Ensure results are consumed
 
                 # Nodes not connected to start node need to check degree
@@ -1220,7 +1295,9 @@ class Neo4JStorage(BaseGraphStorage):
                 async for record in result:
                     labels.append(record["label"])
             finally:
-                await result.consume()  # Ensure results are consumed even if processing fails
+                await (
+                    result.consume()
+                )  # Ensure results are consumed even if processing fails
             return labels
 
     @retry(
@@ -1307,7 +1384,9 @@ class Neo4JStorage(BaseGraphStorage):
                 MATCH (source:base {entity_id: $source_entity_id})-[r]-(target:base {entity_id: $target_entity_id})
                 DELETE r
                 """
-                result = await tx.run(query, source_entity_id=source, target_entity_id=target)
+                result = await tx.run(
+                    query, source_entity_id=source, target_entity_id=target
+                )
                 logger.debug(f"Deleted edge from '{source}' to '{target}'")
                 await result.consume()  # Ensure result is fully consumed
 
@@ -1319,7 +1398,9 @@ class Neo4JStorage(BaseGraphStorage):
                 raise
 
     @with_semaphore
-    async def embed_nodes(self, algorithm: str) -> tuple[np.ndarray[Any, Any], list[str]]:
+    async def embed_nodes(
+        self, algorithm: str
+    ) -> tuple[np.ndarray[Any, Any], list[str]]:
         raise NotImplementedError
 
     def _worker_done_callback(self, future: asyncio.Future):
@@ -1343,7 +1424,9 @@ class Neo4JStorage(BaseGraphStorage):
             # Log stack trace for debugging
             import traceback
 
-            logger.debug(f"Worker {worker_id} exception traceback: {traceback.format_exc()}")
+            logger.debug(
+                f"Worker {worker_id} exception traceback: {traceback.format_exc()}"
+            )
 
     async def start_workers(self):
         """Start all worker tasks"""

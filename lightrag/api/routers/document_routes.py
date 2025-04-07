@@ -314,7 +314,9 @@ async def pipeline_enqueue_file(rag: LightRAG, file_path: Path) -> bool:
 
                     docx_file = BytesIO(file)
                     doc = Document(docx_file)
-                    content = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+                    content = "\n".join(
+                        [paragraph.text for paragraph in doc.paragraphs]
+                    )
             case ".pptx":
                 if global_args["main_args"].document_loading_engine == "DOCLING":
                     if not pm.is_installed("docling"):  # type: ignore
@@ -359,12 +361,17 @@ async def pipeline_enqueue_file(rag: LightRAG, file_path: Path) -> bool:
                         content += f"Sheet: {sheet.title}\n"
                         for row in sheet.iter_rows(values_only=True):
                             content += (
-                                "\t".join(str(cell) if cell is not None else "" for cell in row)
+                                "\t".join(
+                                    str(cell) if cell is not None else ""
+                                    for cell in row
+                                )
                                 + "\n"
                             )
                         content += "\n"
             case _:
-                logger.error(f"Unsupported file type: {file_path.name} (extension {ext})")
+                logger.error(
+                    f"Unsupported file type: {file_path.name} (extension {ext})"
+                )
                 return False
 
         # Insert into the RAG queue
@@ -373,14 +380,20 @@ async def pipeline_enqueue_file(rag: LightRAG, file_path: Path) -> bool:
             original_file_name = file_path.name
             if original_file_name.startswith(temp_prefix):
                 # Extract the original filename which comes after the timestamp (format: temp_YYYYMMDD_HHMMSS_originalname)
-                parts = original_file_name.split("_", 3)  # Split by underscore, max 3 splits
+                parts = original_file_name.split(
+                    "_", 3
+                )  # Split by underscore, max 3 splits
                 if len(parts) >= 4:  # Should contain [temp, date, time, original_name]
-                    original_file_name = parts[3]  # The original filename is the 4th part
+                    original_file_name = parts[
+                        3
+                    ]  # The original filename is the 4th part
                 logger.debug(
                     f"Using original filename: {original_file_name} instead of temporary: {file_path.name}"
                 )
 
-            await rag.apipeline_enqueue_documents(content, file_paths=original_file_name)
+            await rag.apipeline_enqueue_documents(
+                content, file_paths=original_file_name
+            )
             logger.info(f"Successfully fetched and enqueued file: {original_file_name}")
             return True
         else:
@@ -535,7 +548,9 @@ def create_document_routes(
         return {"status": "scanning_started"}
 
     @router.post("/upload", dependencies=[Depends(combined_auth)])
-    async def upload_to_input_dir(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    async def upload_to_input_dir(
+        background_tasks: BackgroundTasks, file: UploadFile = File(...)
+    ):
         """
         Upload a file to the input directory and index it.
 
@@ -584,8 +599,12 @@ def create_document_routes(
             logger.error(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.post("/text", response_model=InsertResponse, dependencies=[Depends(combined_auth)])
-    async def insert_text(request: InsertTextRequest, background_tasks: BackgroundTasks):
+    @router.post(
+        "/text", response_model=InsertResponse, dependencies=[Depends(combined_auth)]
+    )
+    async def insert_text(
+        request: InsertTextRequest, background_tasks: BackgroundTasks
+    ):
         """
         Insert text into the RAG system.
 
@@ -618,7 +637,9 @@ def create_document_routes(
         response_model=InsertResponse,
         dependencies=[Depends(combined_auth)],
     )
-    async def insert_texts(request: InsertTextsRequest, background_tasks: BackgroundTasks):
+    async def insert_texts(
+        request: InsertTextsRequest, background_tasks: BackgroundTasks
+    ):
         """
         Insert multiple texts into the RAG system.
 
@@ -646,8 +667,12 @@ def create_document_routes(
             logger.error(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.post("/file", response_model=InsertResponse, dependencies=[Depends(combined_auth)])
-    async def insert_file(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    @router.post(
+        "/file", response_model=InsertResponse, dependencies=[Depends(combined_auth)]
+    )
+    async def insert_file(
+        background_tasks: BackgroundTasks, file: UploadFile = File(...)
+    ):
         """
         Insert a file directly into the RAG system.
 
@@ -690,7 +715,9 @@ def create_document_routes(
         response_model=InsertResponse,
         dependencies=[Depends(combined_auth)],
     )
-    async def insert_batch(background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
+    async def insert_batch(
+        background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)
+    ):
         """
         Process multiple files in batch mode.
 
@@ -731,9 +758,7 @@ def create_document_routes(
                 status_message = f"Successfully inserted all {inserted_count} documents"
             elif inserted_count > 0:
                 status = "partial_success"
-                status_message = (
-                    f"Successfully inserted {inserted_count} out of {len(files)} documents"
-                )
+                status_message = f"Successfully inserted {inserted_count} out of {len(files)} documents"
                 if failed_files:
                     status_message += f". Failed files: {', '.join(failed_files)}"
             else:
@@ -748,7 +773,9 @@ def create_document_routes(
             logger.error(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.delete("", response_model=InsertResponse, dependencies=[Depends(combined_auth)])
+    @router.delete(
+        "", response_model=InsertResponse, dependencies=[Depends(combined_auth)]
+    )
     async def clear_documents():
         """
         Clear all documents from the RAG system.
@@ -764,7 +791,9 @@ def create_document_routes(
         """
         try:
             await rag.aclear_documents()
-            return InsertResponse(status="success", message="All documents cleared successfully")
+            return InsertResponse(
+                status="success", message="All documents cleared successfully"
+            )
         except Exception as e:
             logger.error(f"Error DELETE /documents: {str(e)}")
             logger.error(traceback.format_exc())
@@ -881,8 +910,12 @@ def create_document_routes(
                             content_summary=doc_status.content_summary,
                             content_length=doc_status.content_length,
                             status=doc_status.status,
-                            created_at=DocStatusResponse.format_datetime(doc_status.created_at),
-                            updated_at=DocStatusResponse.format_datetime(doc_status.updated_at),
+                            created_at=DocStatusResponse.format_datetime(
+                                doc_status.created_at
+                            ),
+                            updated_at=DocStatusResponse.format_datetime(
+                                doc_status.updated_at
+                            ),
                             chunks_count=doc_status.chunks_count,
                             error=doc_status.error,
                             metadata=doc_status.metadata,

@@ -54,7 +54,9 @@ class RelationResponse(BaseModel):
     src_entity: str = Field(description="Source entity of the relation")
     tgt_entity: str = Field(description="Target entity of the relation")
     source_id: Optional[str] = Field(description="Source ID of the relation")
-    graph_data: Optional[Dict[str, Any]] = Field(description="Graph data of the relation")
+    graph_data: Optional[Dict[str, Any]] = Field(
+        description="Graph data of the relation"
+    )
 
 
 def create_graph_routes(rag: LightRAG, api_key: Optional[str] = None):
@@ -199,7 +201,9 @@ def create_graph_routes(rag: LightRAG, api_key: Optional[str] = None):
         response_model=RelationResponse,
         dependencies=[Depends(combined_auth)],
     )
-    async def edit_relation(source: str, relation_type: str, target: str, data: RelationRequest):
+    async def edit_relation(
+        source: str, relation_type: str, target: str, data: RelationRequest
+    ):
         """
         Updates relation (edge) information in the knowledge graph and re-embeds the relation in the vector database.
 
@@ -215,7 +219,9 @@ def create_graph_routes(rag: LightRAG, api_key: Optional[str] = None):
         result = await rag.aedit_relation(source, target, data.model_dump())
         return RelationResponse(**result)
 
-    @router.post("/merge", response_model=EntityResponse, dependencies=[Depends(combined_auth)])
+    @router.post(
+        "/merge", response_model=EntityResponse, dependencies=[Depends(combined_auth)]
+    )
     async def merge_entities(data: MergeEntitiesRequest):
         """
         Merges multiple source entities into a target entity, handling all relationships,

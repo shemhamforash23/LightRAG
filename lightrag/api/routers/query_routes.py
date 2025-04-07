@@ -143,7 +143,9 @@ class QueryResponse(BaseModel):
 def create_query_routes(rag: LightRAG, api_key: Optional[str] = None, top_k: int = 60):
     combined_auth = get_combined_auth_dependency(api_key)
 
-    @router.post("/query", response_model=QueryResponse, dependencies=[Depends(combined_auth)])
+    @router.post(
+        "/query", response_model=QueryResponse, dependencies=[Depends(combined_auth)]
+    )
     async def query_text(request: QueryRequest):
         """
         Handle a POST request at the /query endpoint to process user queries using RAG capabilities.

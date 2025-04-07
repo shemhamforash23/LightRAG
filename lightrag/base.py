@@ -65,7 +65,9 @@ class QueryParam:
     max_token_for_text_unit: int = int(os.getenv("MAX_TOKEN_TEXT_CHUNK", "4000"))
     """Maximum number of tokens allowed for each retrieved text chunk."""
 
-    max_token_for_global_context: int = int(os.getenv("MAX_TOKEN_RELATION_DESC", "4000"))
+    max_token_for_global_context: int = int(
+        os.getenv("MAX_TOKEN_RELATION_DESC", "4000")
+    )
     """Maximum number of tokens allocated for relationship descriptions in global retrieval."""
 
     max_token_for_local_context: int = int(os.getenv("MAX_TOKEN_ENTITY_DESC", "4000"))
@@ -265,7 +267,9 @@ class BaseGraphStorage(StorageNameSpace, ABC):
         """Get an edge by its source and target node ids."""
 
     @abstractmethod
-    async def get_edge(self, source_node_id: str, target_node_id: str) -> dict[str, str] | None:
+    async def get_edge(
+        self, source_node_id: str, target_node_id: str
+    ) -> dict[str, str] | None:
         """Get all edges connected to a node."""
 
     @abstractmethod
@@ -303,7 +307,9 @@ class BaseGraphStorage(StorageNameSpace, ABC):
         """
 
     @abstractmethod
-    async def embed_nodes(self, algorithm: str) -> tuple[np.ndarray[Any, Any], list[str]]:
+    async def embed_nodes(
+        self, algorithm: str
+    ) -> tuple[np.ndarray[Any, Any], list[str]]:
         """Embed nodes using an algorithm."""
 
     @abstractmethod
@@ -312,7 +318,11 @@ class BaseGraphStorage(StorageNameSpace, ABC):
 
     @abstractmethod
     async def get_knowledge_graph(
-        self, node_label: str, max_depth: int = 3, min_degree: int = 0, inclusive: bool = False
+        self,
+        node_label: str,
+        max_depth: int = 3,
+        min_degree: int = 0,
+        inclusive: bool = False,
     ) -> KnowledgeGraph:
         """Retrieve a subgraph of the knowledge graph starting from a given node."""
 
@@ -361,7 +371,9 @@ class DocStatusStorage(BaseKVStorage, ABC):
         """Get counts of documents in each status"""
 
     @abstractmethod
-    async def get_docs_by_status(self, status: DocStatus) -> dict[str, DocProcessingStatus]:
+    async def get_docs_by_status(
+        self, status: DocStatus
+    ) -> dict[str, DocProcessingStatus]:
         """Get all documents with a specific status"""
 
     @abstractmethod

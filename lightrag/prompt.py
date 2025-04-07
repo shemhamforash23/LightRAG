@@ -1,226 +1,35 @@
 from __future__ import annotations
 
-from typing import Any
+import importlib
+import logging
+import os
+from typing import Any, Dict
+
+import dotenv
+
+# Настройка логгера
+dotenv.load_dotenv()
+logger = logging.getLogger("prompts")
+logger.setLevel(logging.DEBUG)
+
+# Добавляем обработчик для вывода в консоль, если его еще нет
+if not logger.handlers:
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
 
 GRAPH_FIELD_SEP = "<SEP>"
 
-PROMPTS: dict[str, Any] = {}
+PROMPTS: Dict[str, Any] = {}
 
 PROMPTS["DEFAULT_LANGUAGE"] = "English"
 PROMPTS["DEFAULT_TUPLE_DELIMITER"] = "<|>"
 PROMPTS["DEFAULT_RECORD_DELIMITER"] = "##"
 PROMPTS["DEFAULT_COMPLETION_DELIMITER"] = "<|COMPLETE|>"
 
-PROMPTS["DEFAULT_ENTITY_TYPES"] = [
-    "module",
-    "class",
-    "function",
-    "method",
-    "variable",
-    "interface",
-    "library",
-    "framework",
-]
-
-PROMPTS["entity_extraction"] = """---Goal---
-Given a code snippet or documentation that is potentially relevant to this activity and a list of entity types, identify all code entities of those types from the text and all relationships among the identified entities.
-Use {language} as output language.
-
----Steps---
-1. Identify all code entities. For each identified entity, extract the following information:
-- entity_name: Name of the entity, use same language as input text. Preserve the exact casing of the entity name.
-- entity_type: One of the following types: [{entity_types}]
-- entity_description: Comprehensive description of the entity's purpose, functionality, and implementation details
-Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>)
-
-2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
-For each pair of related entities, extract the following information:
-- source_entity: name of the source entity, as identified in step 1
-- target_entity: name of the target entity, as identified in step 1
-- relationship_description: explanation as to why you think the source entity and the target entity are related to each other (e.g., inheritance, composition, dependency, function call)
-- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
-- relationship_keywords: one or more high-level key words that summarize the overarching nature of the relationship, focusing on concepts or themes rather than specific details (e.g., "imports", "extends", "implements", "calls", "uses")
-Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
-
-3. Identify high-level key words that summarize the main concepts, themes, or topics of the entire code. These should capture the overarching ideas, patterns, or architecture present in the code.
-Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
-
-4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
-
-5. When finished, output {completion_delimiter}
-
-######################
----Examples---
-######################
-{examples}
-
-#############################
----Real Data---
-######################
-Entity_types: [{entity_types}]
-Text:
-{input_text}
-######################
-Output:
-"""
-
-PROMPTS["entity_extraction_examples"] = [
-    """Example 1:
-
-Entity_types: [class, method, function, module, library]
-Text:
-```python
-import numpy as np
-from sklearn.model_selection import train_test_split
-
-class DataProcessor:
-    def __init__(self, data_path):
-        self.data_path = data_path
-        self.data = None
-    
-    def load_data(self):
-        self.data = np.loadtxt(self.data_path, delimiter=',')
-        return self.data
-    
-    def preprocess(self, normalize=True):
-        if self.data is None:
-            self.load_data()
-        
-        if normalize:
-            self.data = (self.data - np.mean(self.data, axis=0)) / np.std(self.data, axis=0)
-        
-        return self.data
-
-def split_dataset(data, test_size=0.2, random_state=42):
-    X = data[:, :-1]
-    y = data[:, -1]
-    return train_test_split(X, y, test_size=test_size, random_state=random_state)
-```
-
-Output:
-("entity"{tuple_delimiter}"numpy"{tuple_delimiter}"library"{tuple_delimiter}"NumPy is a library for numerical computing in Python, providing support for arrays, matrices, and mathematical functions."){record_delimiter}
-("entity"{tuple_delimiter}"sklearn.model_selection"{tuple_delimiter}"module"{tuple_delimiter}"A module from scikit-learn that provides utilities for splitting datasets into training and testing sets."){record_delimiter}
-("entity"{tuple_delimiter}"train_test_split"{tuple_delimiter}"function"{tuple_delimiter}"A function from sklearn.model_selection that splits arrays or matrices into random train and test subsets."){record_delimiter}
-("entity"{tuple_delimiter}"DataProcessor"{tuple_delimiter}"class"{tuple_delimiter}"A class designed to load and preprocess data from a specified file path, with options for normalization."){record_delimiter}
-("entity"{tuple_delimiter}"__init__"{tuple_delimiter}"method"{tuple_delimiter}"Constructor method for the DataProcessor class that initializes the data_path attribute and sets data to None."){record_delimiter}
-("entity"{tuple_delimiter}"load_data"{tuple_delimiter}"method"{tuple_delimiter}"Method of DataProcessor that loads data from the specified file path using numpy's loadtxt function."){record_delimiter}
-("entity"{tuple_delimiter}"preprocess"{tuple_delimiter}"method"{tuple_delimiter}"Method of DataProcessor that normalizes data if specified, ensuring data is loaded first if it hasn't been already."){record_delimiter}
-("entity"{tuple_delimiter}"split_dataset"{tuple_delimiter}"function"{tuple_delimiter}"A standalone function that splits a dataset into features and target, then into training and testing sets using sklearn's train_test_split."){record_delimiter}
-("relationship"{tuple_delimiter}"DataProcessor"{tuple_delimiter}"load_data"{tuple_delimiter}"The DataProcessor class contains the load_data method which is responsible for loading data from a file."{tuple_delimiter}"class method, data loading"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"DataProcessor"{tuple_delimiter}"preprocess"{tuple_delimiter}"The DataProcessor class contains the preprocess method which is responsible for normalizing the data."{tuple_delimiter}"class method, data transformation"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"preprocess"{tuple_delimiter}"load_data"{tuple_delimiter}"The preprocess method calls the load_data method if data hasn't been loaded yet."{tuple_delimiter}"method call, dependency"{tuple_delimiter}7){record_delimiter}
-("relationship"{tuple_delimiter}"load_data"{tuple_delimiter}"numpy"{tuple_delimiter}"The load_data method uses numpy's loadtxt function to read data from a file."{tuple_delimiter}"library usage, data loading"{tuple_delimiter}8){record_delimiter}
-("relationship"{tuple_delimiter}"preprocess"{tuple_delimiter}"numpy"{tuple_delimiter}"The preprocess method uses numpy functions like mean and std for data normalization."{tuple_delimiter}"library usage, data processing"{tuple_delimiter}8){record_delimiter}
-("relationship"{tuple_delimiter}"split_dataset"{tuple_delimiter}"train_test_split"{tuple_delimiter}"The split_dataset function uses the train_test_split function from sklearn to divide data into training and testing sets."{tuple_delimiter}"function call, data splitting"{tuple_delimiter}9){record_delimiter}
-("content_keywords"{tuple_delimiter}"data processing, machine learning preprocessing, dataset splitting, normalization, numpy operations"){completion_delimiter}
-
-#############################""",
-    """
-Example 2:
-
-Entity_types: [class, function, module, variable, interface]
-Text:
-```python
-# Authentication service for user management
-from typing import Optional, Dict, Any
-import requests
-import json
-import os
-
-class AuthService:
-    \\\"\\\"\\\"Service for handling authentication operations\\\"\\\"\\\"\"
-    
-    def __init__(self, base_url: str):
-        \\\"\\\"\\\"Initialize the auth service with base URL\\\"\\\"\\\"\"
-        self.api_url = base_url + '/auth'
-        self.current_user_key = 'current_user'
-        self.session = requests.Session()
-    
-    def login(self, email: str, password: str) -> Dict[str, Any]:
-        \\\"\\\"\\\"Log in a user with email and password\\\"\\\"\\\"\"
-        response = self.session.post(
-            self.api_url + '/login',
-            data=dict(email=email, password=password)
-        )
-        response.raise_for_status()
-        data = response.json()
-        
-        # Store user details and token
-        os.environ[self.current_user_key] = json.dumps(data)
-        return data.get('user')
-    
-    def logout(self) -> None:
-        \\\"\\\"\\\"Log out the current user\\\"\\\"\\\"\"
-        if self.current_user_key in os.environ:
-            del os.environ[self.current_user_key]
-    
-    def get_current_user(self) -> Optional[Dict[str, Any]]:
-        \\\"\\\"\\\"Get the currently logged in user\\\"\\\"\\\"\"
-        user_data = os.environ.get(self.current_user_key)
-        if user_data:
-            data = json.loads(user_data)
-            return data.get('user')
-        return None
-```
-
-Output:
-("entity"{tuple_delimiter}"requests"{tuple_delimiter}"module"{tuple_delimiter}"A Python library for making HTTP requests, providing a simple API for interacting with web services."){record_delimiter}
-("entity"{tuple_delimiter}"json"{tuple_delimiter}"module"{tuple_delimiter}"A Python module for encoding and decoding JSON data, used for serializing and deserializing data structures."){record_delimiter}
-("entity"{tuple_delimiter}"os"{tuple_delimiter}"module"{tuple_delimiter}"A Python module providing a way to interact with the operating system, including environment variables."){record_delimiter}
-("entity"{tuple_delimiter}"AuthService"{tuple_delimiter}"class"{tuple_delimiter}"A service class responsible for handling authentication operations like login, logout, and retrieving the current user."){record_delimiter}
-("entity"{tuple_delimiter}"__init__"{tuple_delimiter}"method"{tuple_delimiter}"Constructor method for the AuthService class that initializes the API URL, user key, and creates a session."){record_delimiter}
-("entity"{tuple_delimiter}"api_url"{tuple_delimiter}"variable"{tuple_delimiter}"An instance variable in AuthService that stores the base URL for authentication API endpoints."){record_delimiter}
-("entity"{tuple_delimiter}"current_user_key"{tuple_delimiter}"variable"{tuple_delimiter}"An instance variable in AuthService that defines the key used for storing user data in environment variables."){record_delimiter}
-("entity"{tuple_delimiter}"session"{tuple_delimiter}"variable"{tuple_delimiter}"An instance variable in AuthService that holds a requests Session object for making HTTP requests."){record_delimiter}
-("entity"{tuple_delimiter}"login"{tuple_delimiter}"method"{tuple_delimiter}"A method in AuthService that sends user credentials to the server and stores the returned user data."){record_delimiter}
-("entity"{tuple_delimiter}"logout"{tuple_delimiter}"method"{tuple_delimiter}"A method in AuthService that removes the current user's data from environment variables."){record_delimiter}
-("entity"{tuple_delimiter}"get_current_user"{tuple_delimiter}"method"{tuple_delimiter}"A method in AuthService that retrieves and parses the current user's data from environment variables."){record_delimiter}
-("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"__init__"{tuple_delimiter}"The AuthService class contains the __init__ method which initializes the service with necessary configuration."{tuple_delimiter}"class method, initialization"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"login"{tuple_delimiter}"The AuthService class contains the login method which authenticates users with the server."{tuple_delimiter}"class method, authentication"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"logout"{tuple_delimiter}"The AuthService class contains the logout method which removes user authentication data."{tuple_delimiter}"class method, authentication"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"AuthService"{tuple_delimiter}"get_current_user"{tuple_delimiter}"The AuthService class contains the get_current_user method which retrieves the authenticated user."{tuple_delimiter}"class method, user retrieval"{tuple_delimiter}9){record_delimiter}
-("relationship"{tuple_delimiter}"login"{tuple_delimiter}"requests"{tuple_delimiter}"The login method uses the requests module to make HTTP POST requests to the authentication endpoint."{tuple_delimiter}"module usage, HTTP communication"{tuple_delimiter}8){record_delimiter}
-("relationship"{tuple_delimiter}"login"{tuple_delimiter}"json"{tuple_delimiter}"The login method uses the json module to serialize and deserialize data between Python and JSON."{tuple_delimiter}"module usage, data serialization"{tuple_delimiter}7){record_delimiter}
-("relationship"{tuple_delimiter}"login"{tuple_delimiter}"os"{tuple_delimiter}"The login method uses the os module to store user data in environment variables."{tuple_delimiter}"module usage, data storage"{tuple_delimiter}7){record_delimiter}
-("relationship"{tuple_delimiter}"logout"{tuple_delimiter}"os"{tuple_delimiter}"The logout method uses the os module to remove user data from environment variables."{tuple_delimiter}"module usage, data removal"{tuple_delimiter}7){record_delimiter}
-("relationship"{tuple_delimiter}"get_current_user"{tuple_delimiter}"os"{tuple_delimiter}"The get_current_user method uses the os module to retrieve user data from environment variables."{tuple_delimiter}"module usage, data retrieval"{tuple_delimiter}7){record_delimiter}
-("relationship"{tuple_delimiter}"get_current_user"{tuple_delimiter}"json"{tuple_delimiter}"The get_current_user method uses the json module to parse user data from a JSON string."{tuple_delimiter}"module usage, data deserialization"{tuple_delimiter}7){record_delimiter}
-("content_keywords"{tuple_delimiter}"authentication, Python service, HTTP requests, environment variables, user management, JSON serialization"){completion_delimiter}
-""",
-]
-
-PROMPTS["entity_continue_extraction"] = """
-MANY entities and relationships were missed in the last extraction.
-
----Remember Steps---
-
-1. Identify all code entities. For each identified entity, extract the following information:
-- entity_name: Name of the entity, use same language as input text. Preserve the exact casing of the entity name.
-- entity_type: One of the following types: [{entity_types}]
-- entity_description: Comprehensive description of the entity's purpose, functionality, and implementation details
-Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>)
-
-2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
-For each pair of related entities, extract the following information:
-- source_entity: name of the source entity, as identified in step 1
-- target_entity: name of the target entity, as identified in step 1
-- relationship_description: explanation as to why you think the source entity and the target entity are related to each other (e.g., inheritance, composition, dependency, function call)
-- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
-- relationship_keywords: one or more high-level key words that summarize the overarching nature of the relationship, focusing on concepts or themes rather than specific details (e.g., "imports", "extends", "implements", "calls", "uses")
-Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_strength>)
-
-3. Identify high-level key words that summarize the main concepts, themes, or topics of the entire code. These should capture the overarching ideas, patterns, or architecture present in the code.
-Format the content-level key words as ("content_keywords"{tuple_delimiter}<high_level_keywords>)
-
-4. Return output in {language} as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
-
-5. When finished, output {completion_delimiter}
-
-----Output---
-
-Add them below using the same format:
-"""
-
+# Общие промпты, которые не зависят от типа анализируемого контента
 PROMPTS["entity_if_loop_extraction"] = """
 ----Goal---'
 
@@ -248,8 +57,10 @@ Description List: {description_list}
 Output:
 """
 
+# Промпт для ответа при ошибке
 PROMPTS["fail_response"] = "Sorry, I'm not able to provide an answer to that question.[no-context]"
 
+# Промпт для ответа на основе базы знаний
 PROMPTS["rag_response"] = """---Role---
 
 You are a helpful assistant responding to user query about Knowledge Base provided below.
@@ -281,6 +92,7 @@ When handling relationships with timestamps:
 - If you don't know the answer, just say so.
 - Do not make anything up. Do not include information not provided by Knowledge Base."""
 
+# Промпт для извлечения ключевых слов
 PROMPTS["keywords_extraction"] = """---Role---
 
 You are a helpful assistant tasked with identifying both high-level and low-level keywords in the user's query and conversation history.
@@ -315,6 +127,7 @@ Output:
 
 """
 
+# Примеры для извлечения ключевых слов
 PROMPTS["keywords_extraction_examples"] = [
     """Example 1:
 
@@ -368,6 +181,7 @@ Output:
 #############################""",
 ]
 
+# Промпт для ответа на основе документов
 PROMPTS["naive_rag_response"] = """---Role---
 
 You are a helpful assistant responding to user query about Document Chunks provided below.
@@ -399,6 +213,7 @@ When handling content with timestamps:
 - Do not make anything up.
 - Do not include information not provided by the Document Chunks."""
 
+# Промпт для проверки схожести запросов
 PROMPTS["similarity_check"] = """Please analyze the similarity between these two questions:
 
 Question 1: {original_prompt}
@@ -420,6 +235,7 @@ Similarity score criteria:
 Return only a number between 0-1, without any additional content.
 """
 
+# Промпт для ответа на основе смешанных источников
 PROMPTS["mix_rag_response"] = """---Role---
 
 You are a helpful assistant responding to user query about Data Sources provided below.
@@ -457,3 +273,64 @@ When handling information with timestamps:
 - List up to 5 most important reference sources at the end under "References" section. Clearly indicating whether each source is from Knowledge Graph (KG) or Vector Data (DC), and include the file path if available, in the following format: [KG/DC] file_path
 - If you don't know the answer, just say so. Do not make anything up.
 - Do not include information not provided by the Data Sources."""
+
+# --- Логика загрузки промптов на основе выбранного режима ---
+
+# Сопоставление режимов с модулями в пакете 'lightrag.prompts'
+PROMPT_MODULE_MAP: Dict[str, str] = {
+    "code": ".prompts.code_prompts",
+    "research": ".prompts.research_prompts",
+}
+DEFAULT_PROMPT_MODE = "code"
+
+
+def load_mode_prompts() -> None:
+    """
+    Загружает соответствующий набор промптов в глобальный словарь PROMPTS
+    путем динамического импорта модуля, указанного переменной окружения
+    LIGHTRAG_PROMPT_MODE из пакета 'lightrag.prompts'.
+    """
+    global PROMPTS
+    mode = os.environ.get("LIGHTRAG_PROMPT_MODE", DEFAULT_PROMPT_MODE).lower()
+    module_name = PROMPT_MODULE_MAP.get(mode)
+
+    if not module_name:
+        logger.warning(
+            f"Invalid LIGHTRAG_PROMPT_MODE '{mode}'. "
+            f"Falling back to default mode '{DEFAULT_PROMPT_MODE}'."
+        )
+        module_name = PROMPT_MODULE_MAP[DEFAULT_PROMPT_MODE]
+        mode = DEFAULT_PROMPT_MODE
+    else:
+        logger.info(f"Using prompt mode: '{mode}'")
+
+    try:
+        # Динамически импортируем модуль относительно пакета 'lightrag'
+        # Параметр 'package' здесь крайне важен
+        prompt_module = importlib.import_module(module_name, package="lightrag")
+
+        if hasattr(prompt_module, "PROMPTS") and isinstance(prompt_module.PROMPTS, dict):
+            # Обновляем глобальный словарь PROMPTS соответствующими промптами из модуля
+            # Сохраняя при этом базовые промпты, определенные выше
+            mode_prompts = prompt_module.PROMPTS
+            PROMPTS.update(mode_prompts)
+            logger.debug(
+                f"Loaded {len(mode_prompts)} prompts from module '{module_name}' for mode '{mode}'."
+            )
+        else:
+            logger.error(
+                f"Prompt module '{module_name}' (mode: {mode}) does not contain a valid 'PROMPTS' dictionary. Only base prompts are available."
+            )
+
+    except ImportError as e:
+        logger.error(
+            f"Could not import prompt module '{module_name}' for mode '{mode}': {e}. Only base prompts are available."
+        )
+    except Exception as e:
+        logger.error(
+            f"An unexpected error occurred while loading prompts for mode '{mode}': {e}. Only base prompts are available."
+        )
+
+
+# --- Загружаем промпты при первом импорте модуля ---
+load_mode_prompts()

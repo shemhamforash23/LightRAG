@@ -974,7 +974,10 @@ class LightRAG:
                 llm_response_cache=self.llm_response_cache,
             )
         except Exception as e:
-            logger.error("Failed to extract entities and relationships")
+            import traceback
+
+            logger.error(f"Failed to extract entities and relationships: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise e
 
     async def _insert_done(self, pipeline_status=None, pipeline_status_lock=None) -> None:

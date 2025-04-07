@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from typing import Any, Union, final
 
 from lightrag.base import (
@@ -12,13 +12,15 @@ from lightrag.utils import (
     logger,
     write_json,
 )
+
 from .shared_storage import (
+    UnifiedLock,
+    clear_all_update_flags,
+    get_data_init_lock,
     get_namespace_data,
     get_storage_lock,
-    get_data_init_lock,
     get_update_flag,
     set_all_update_flags,
-    clear_all_update_flags,
     try_initialize_namespace,
 )
 
@@ -31,13 +33,12 @@ class JsonDocStatusStorage(DocStatusStorage):
     def __post_init__(self):
         working_dir = self.global_config["working_dir"]
         self._file_name = os.path.join(working_dir, f"kv_store_{self.namespace}.json")
-        self._data = None
-        self._storage_lock = None
+        self._data: dict[str, Any] = {}
         self.storage_updated = None
 
     async def initialize(self):
         """Initialize storage data"""
-        self._storage_lock = get_storage_lock()
+        self._storage_lock: UnifiedLock = get_storage_lock()
         self.storage_updated = await get_update_flag(self.namespace)
         async with get_data_init_lock():
             # check need_init must before get_namespace_data
@@ -73,9 +74,7 @@ class JsonDocStatusStorage(DocStatusStorage):
                 counts[doc["status"]] += 1
         return counts
 
-    async def get_docs_by_status(
-        self, status: DocStatus
-    ) -> dict[str, DocProcessingStatus]:
+    async def get_docs_by_status(self, status: DocStatus) -> dict[str, DocProcessingStatus]:
         """Get all documents with a specific status"""
         result = {}
         async with self._storage_lock:
@@ -99,9 +98,7 @@ class JsonDocStatusStorage(DocStatusStorage):
     async def index_done_callback(self) -> None:
         async with self._storage_lock:
             if self.storage_updated.value:
-                data_dict = (
-                    dict(self._data) if hasattr(self._data, "_getvalue") else self._data
-                )
+                data_dict = dict(self._data) if hasattr(self._data, "_getvalue") else self._data
                 logger.info(
                     f"Process {os.getpid()} doc status writting {len(data_dict)} records to {self.namespace}"
                 )
@@ -135,3 +132,10 @@ class JsonDocStatusStorage(DocStatusStorage):
             self._data.clear()
             await set_all_update_flags(self.namespace)
         await self.index_done_callback()
+
+    async def get_all(self) -> dict[str, dict[str, Any]]:
+        async with self._storage_lock:
+            return dict(self._data)
+
+    async def get_chunks_by_doc_id(self, doc_id: str) -> dict[str, dict[str, Any]]:
+        raise NotImplementedError

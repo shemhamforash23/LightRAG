@@ -215,7 +215,6 @@ def create_graph_routes(rag: LightRAG, api_key: Optional[str] = None):
         result = await rag.aedit_relation(source, target, data.model_dump())
         return RelationResponse(**result)
 
-    # Эндпоинт для слияния сущностей
     @router.post("/merge", response_model=EntityResponse, dependencies=[Depends(combined_auth)])
     async def merge_entities(data: MergeEntitiesRequest):
         """

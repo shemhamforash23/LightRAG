@@ -1,6 +1,9 @@
 # Python-related files and directories
 __pycache__
 .cache
+.mypy_cache
+.ruff_cache
+.venv
 
 # Virtual environment directories
 *.venv

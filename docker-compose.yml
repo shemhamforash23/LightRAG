@@ -1,13 +1,131 @@
 services:
-  lightrag:
-    build: .
+  postgres:
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    container_name: lightrag-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-lightrag}
     ports:
-      - "${PORT:-9621}:9621"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - ./data/rag_storage:/app/data/rag_storage
-      - ./data/inputs:/app/data/inputs
-      - ./config.ini:/app/config.ini
-      - ./.env:/app/.env
-    env_file:
-      - .env
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
+
+  dozerdb:
+    image: graphstack/dozerdb:latest
+    container_name: lightrag-dozerdb
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password}
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: yes
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_apoc_import_file_useneo4jconfig: "true"
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+      NEO4J_dbms_security_procedures_allowlist: "apoc.*"
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    volumes:
+      - dozerdb-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    
+  lightrag:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lightrag-app
+    environment:
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-9621}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      VERBOSE: ${VERBOSE:-false}
+      WORKING_DIR: ${WORKING_DIR:-/app/data/rag_storage}
+      INPUT_DIR: ${INPUT_DIR:-/app/data/inputs}
+      
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-lightrag}
+      NEO4J_URI: bolt://dozerdb:7687
+      NEO4J_USERNAME: ${NEO4J_USERNAME:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password}
+      NEO4J_DATABASE: ${NEO4J_DATABASE:-lightrag}
+      NEO4J_MAX_CONCURRENT_REQUESTS: ${NEO4J_MAX_CONCURRENT_REQUESTS:-45}
+
+      LIGHTRAG_KV_STORAGE: ${LIGHTRAG_KV_STORAGE:-PGKVStorage}
+      LIGHTRAG_VECTOR_STORAGE: ${LIGHTRAG_VECTOR_STORAGE:-PGVectorStorage}
+      LIGHTRAG_GRAPH_STORAGE: ${LIGHTRAG_GRAPH_STORAGE:-Neo4JStorage}
+      LIGHTRAG_DOC_STATUS_STORAGE: ${LIGHTRAG_DOC_STATUS_STORAGE:-PGDocStatusStorage}
+
+      TIMEOUT: ${TIMEOUT:-150}
+      WORKERS: ${WORKERS:-1}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      MAX_ASYNC: ${MAX_ASYNC:-4}
+      MAX_TOKENS: ${MAX_TOKENS:-32768}
+      LIGHTRAG_PROMPT_MODE: ${LIGHTRAG_PROMPT_MODE:-research}
+      TEMPERATURE: ${TEMPERATURE:-0.5}
+      
+      LIGHTRAG_API_KEY: ${LIGHTRAG_API_KEY:-}
+      WHITELIST_PATHS: ${WHITELIST_PATHS:-/health,/api/*}
+
+      LLM_BINDING: ${LLM_BINDING:-ollama}
+      LLM_BINDING_HOST: ${LLM_BINDING_HOST:-http://localhost:11434}
+      LLM_BINDING_API_KEY: ${LLM_BINDING_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-mistral-nemo:latest}
+
+      EMBEDDING_BINDING: ${EMBEDDING_BINDING:-ollama}
+      EMBEDDING_BINDING_HOST: ${EMBEDDING_BINDING_HOST:-http://localhost:11434}
+      EMBEDDING_BINDING_API_KEY: ${EMBEDDING_BINDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3:latest}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+      MAX_EMBED_TOKENS: ${MAX_EMBED_TOKENS:-8192}
+      EMBEDDING_BATCH_NUM: ${EMBEDDING_BATCH_NUM:-32}
+      EMBEDDING_FUNC_MAX_ASYNC: ${EMBEDDING_FUNC_MAX_ASYNC:-16}
+
+      
+      CHUNK_SIZE: ${CHUNK_SIZE:-1200}
+      CHUNK_OVERLAP_SIZE: ${CHUNK_OVERLAP_SIZE:-100}
+      MAX_TOKEN_SUMMARY: ${MAX_TOKEN_SUMMARY:-500}
+      MAX_PARALLEL_INSERT: ${MAX_PARALLEL_INSERT:-2}
+      COSINE_THRESHOLD: ${COSINE_THRESHOLD:-0.2}
+      TOP_K: ${TOP_K:-60}
+      HISTORY_TURNS: ${HISTORY_TURNS:-3}
+      
+      OLLAMA_EMULATING_MODEL_TAG: ${OLLAMA_EMULATING_MODEL_TAG:-latest}
+      SIMULATED_MODEL_NAME: ${SIMULATED_MODEL_NAME:-lightrag:latest}
+      NAMESPACE_PREFIX: ${NAMESPACE_PREFIX:-}
+      SUMMARY_LANGUAGE: ${SUMMARY_LANGUAGE:-english}
+      DOCUMENT_LOADING_ENGINE: ${DOCUMENT_LOADING_ENGINE:-DEFAULT}
+      ENABLE_LLM_CACHE_FOR_EXTRACT: ${ENABLE_LLM_CACHE_FOR_EXTRACT:-true}
+    ports:
+      - "${LIGHTRAG_PORT:-9621}:9621"
+    volumes:
+      - lightrag-storage:/app/data/rag_storage
+      - ./lightrag:/app/lightrag
+      - ./inputs:/app/data/inputs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dozerdb:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  dozerdb-data:
+  lightrag-storage:

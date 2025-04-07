@@ -10,13 +10,15 @@ from lightrag.utils import (
     logger,
     write_json,
 )
+
 from .shared_storage import (
+    UnifiedLock,
+    clear_all_update_flags,
+    get_data_init_lock,
     get_namespace_data,
     get_storage_lock,
-    get_data_init_lock,
     get_update_flag,
     set_all_update_flags,
-    clear_all_update_flags,
     try_initialize_namespace,
 )
 
@@ -27,13 +29,12 @@ class JsonKVStorage(BaseKVStorage):
     def __post_init__(self):
         working_dir = self.global_config["working_dir"]
         self._file_name = os.path.join(working_dir, f"kv_store_{self.namespace}.json")
-        self._data = None
-        self._storage_lock = None
+        self._data: dict[str, Any] = {}
         self.storage_updated = None
 
     async def initialize(self):
         """Initialize storage data"""
-        self._storage_lock = get_storage_lock()
+        self._storage_lock: UnifiedLock = get_storage_lock()
         self.storage_updated = await get_update_flag(self.namespace)
         async with get_data_init_lock():
             # check need_init must before get_namespace_data
@@ -63,9 +64,7 @@ class JsonKVStorage(BaseKVStorage):
     async def index_done_callback(self) -> None:
         async with self._storage_lock:
             if self.storage_updated.value:
-                data_dict = (
-                    dict(self._data) if hasattr(self._data, "_getvalue") else self._data
-                )
+                data_dict = dict(self._data) if hasattr(self._data, "_getvalue") else self._data
 
                 # Calculate data count based on namespace
                 if self.namespace.endswith("cache"):
@@ -94,6 +93,10 @@ class JsonKVStorage(BaseKVStorage):
         async with self._storage_lock:
             return dict(self._data)
 
+    async def get_chunks_by_doc_id(self, doc_id: str) -> dict[str, dict[str, Any]]:
+        async with self._storage_lock:
+            return self._data.get(doc_id, {})
+
     async def get_by_id(self, id: str) -> dict[str, Any] | None:
         async with self._storage_lock:
             return self._data.get(id)
@@ -101,11 +104,7 @@ class JsonKVStorage(BaseKVStorage):
     async def get_by_ids(self, ids: list[str]) -> list[dict[str, Any]]:
         async with self._storage_lock:
             return [
-                (
-                    {k: v for k, v in self._data[id].items()}
-                    if self._data.get(id, None)
-                    else None
-                )
+                ({k: v for k, v in self._data[id].items()} if self._data.get(id, None) else None)
                 for id in ids
             ]
 

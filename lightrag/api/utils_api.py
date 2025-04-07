@@ -2,20 +2,23 @@
 Utility functions for the LightRAG API.
 """
 
-import os
 import argparse
-from typing import Optional, List, Tuple
-import sys
-from ascii_colors import ASCIIColors
 import logging
-from lightrag.api import __api_version__ as api_version
-from lightrag import __version__ as core_version
-from fastapi import HTTPException, Security, Request, status
+import os
+import sys
+from typing import List, Optional, Tuple
+
+from ascii_colors import ASCIIColors
 from dotenv import load_dotenv
+from fastapi import HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from starlette.status import HTTP_403_FORBIDDEN
-from .auth import auth_handler
+
+from lightrag import __version__ as core_version
+from lightrag.api import __api_version__ as api_version
+
 from ..prompt import PROMPTS
+from .auth import auth_handler
 
 
 def check_env_file():
@@ -24,7 +27,9 @@ def check_env_file():
     Returns True if should continue, False if should exit.
     """
     if not os.path.exists(".env"):
-        warning_msg = "Warning: Startup directory must contain .env file for multi-instance support."
+        warning_msg = (
+            "Warning: Startup directory must contain .env file for multi-instance support."
+        )
         ASCIIColors.yellow(warning_msg)
 
         # Check if running in interactive terminal
@@ -115,9 +120,7 @@ def get_combined_auth_dependency(api_key: Optional[str] = None):
         # 1. Check if path is in whitelist
         path = request.url.path
         for pattern, is_prefix in whitelist_patterns:
-            if (is_prefix and path.startswith(pattern)) or (
-                not is_prefix and path == pattern
-            ):
+            if (is_prefix and path.startswith(pattern)) or (not is_prefix and path == pattern):
                 return  # Whitelist path, allow access
 
         # 2. Validate token first if provided in the request (Ensure 401 error if token is invalid)
@@ -147,11 +150,7 @@ def get_combined_auth_dependency(api_key: Optional[str] = None):
             return
 
         # 4. Validate API key if provided and API-Key authentication is configured
-        if (
-            api_key_configured
-            and api_key_header_value
-            and api_key_header_value == api_key
-        ):
+        if api_key_configured and api_key_header_value and api_key_header_value == api_key:
             return  # API key validation successful
 
         ### Authentication failed ####
@@ -296,6 +295,13 @@ def parse_args(is_uvicorn_mode: bool = False) -> argparse.Namespace:
         default=get_env_value("MAX_TOKENS", 32768, int),
         help="Maximum token size (default: from env or 32768)",
     )
+    parser.add_argument(
+        "--prompt-mode",
+        type=str,
+        default=get_env_value("LIGHTRAG_PROMPT_MODE", "research"),
+        choices=["research", "code"],
+        help="Prompt mode (default: from env or research)",
+    )
 
     # Logging configuration
     parser.add_argument(
@@ -361,9 +367,7 @@ def parse_args(is_uvicorn_mode: bool = False) -> argparse.Namespace:
     parser.add_argument(
         "--simulated-model-name",
         type=str,
-        default=get_env_value(
-            "SIMULATED_MODEL_NAME", ollama_server_infos.LIGHTRAG_MODEL
-        ),
+        default=get_env_value("SIMULATED_MODEL_NAME", ollama_server_infos.LIGHTRAG_MODEL),
         help="Number of conversation history turns to include (default: from env or 3)",
     )
 
@@ -422,9 +426,7 @@ def parse_args(is_uvicorn_mode: bool = False) -> argparse.Namespace:
     args.input_dir = os.path.abspath(args.input_dir)
 
     # Inject storage configuration from environment variables
-    args.kv_storage = get_env_value(
-        "LIGHTRAG_KV_STORAGE", DefaultRAGStorageConfig.KV_STORAGE
-    )
+    args.kv_storage = get_env_value("LIGHTRAG_KV_STORAGE", DefaultRAGStorageConfig.KV_STORAGE)
     args.doc_status_storage = get_env_value(
         "LIGHTRAG_DOC_STATUS_STORAGE", DefaultRAGStorageConfig.DOC_STATUS_STORAGE
     )
@@ -443,9 +445,7 @@ def parse_args(is_uvicorn_mode: bool = False) -> argparse.Namespace:
         args.llm_binding = "openai"
         args.embedding_binding = "ollama"
 
-    args.llm_binding_host = get_env_value(
-        "LLM_BINDING_HOST", get_default_host(args.llm_binding)
-    )
+    args.llm_binding_host = get_env_value("LLM_BINDING_HOST", get_default_host(args.llm_binding))
     args.embedding_binding_host = get_env_value(
         "EMBEDDING_BINDING_HOST", get_default_host(args.embedding_binding)
     )
@@ -463,9 +463,7 @@ def parse_args(is_uvicorn_mode: bool = False) -> argparse.Namespace:
     args.chunk_overlap_size = get_env_value("CHUNK_OVERLAP_SIZE", 100, int)
 
     # Inject LLM cache configuration
-    args.enable_llm_cache_for_extract = get_env_value(
-        "ENABLE_LLM_CACHE_FOR_EXTRACT", True, bool
-    )
+    args.enable_llm_cache_for_extract = get_env_value("ENABLE_LLM_CACHE_FOR_EXTRACT", True, bool)
 
     # Inject LLM temperature configuration
     args.temperature = get_env_value("TEMPERATURE", 0.5, float)
@@ -560,6 +558,8 @@ def display_splash_screen(args: argparse.Namespace) -> None:
     # RAG Configuration
     summary_language = os.getenv("SUMMARY_LANGUAGE", PROMPTS["DEFAULT_LANGUAGE"])
     ASCIIColors.magenta("\n⚙️ RAG Configuration:")
+    ASCIIColors.white("    ├─ Prompt Mode: ", end="")
+    ASCIIColors.yellow(f"{args.prompt_mode}")
     ASCIIColors.white("    ├─ Summary Language: ", end="")
     ASCIIColors.yellow(f"{summary_language}")
     ASCIIColors.white("    ├─ Max Parallel Insert: ", end="")

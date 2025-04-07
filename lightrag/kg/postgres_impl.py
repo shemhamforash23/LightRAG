@@ -161,17 +161,19 @@ class PostgreSQLDB:
         with_age: bool = False,
         graph_name: str | None = None,
     ):
+        if self.pool is None:
+            raise ValueError("Database connection not initialized")
         try:
-            async with self.pool.acquire() as connection:  # type: ignore
+            async with self.pool.acquire() as connection:
                 if with_age and graph_name:
-                    await self.configure_age(connection, graph_name)  # type: ignore
+                    await self.configure_age(connection, graph_name)
                 elif with_age and not graph_name:
                     raise ValueError("Graph name is required when with_age is True")
 
                 if data is None:
-                    await connection.execute(sql)  # type: ignore
+                    await connection.execute(sql)
                 else:
-                    await connection.execute(sql, *data.values())  # type: ignore
+                    await connection.execute(sql, *data.values())
         except (
             asyncpg.exceptions.UniqueViolationError,
             asyncpg.exceptions.DuplicateTableError,
@@ -251,6 +253,8 @@ class PGKVStorage(BaseKVStorage):
 
     def __post_init__(self):
         namespace_prefix = self.global_config.get("namespace_prefix")
+        if namespace_prefix is None:
+            raise ValueError("Namespace prefix not found in global config")
         self.base_namespace = self.namespace.replace(namespace_prefix, "")
         self._max_batch_size = self.global_config["embedding_batch_num"]
 
@@ -275,6 +279,8 @@ class PGKVStorage(BaseKVStorage):
         params = {"workspace": self.db.workspace, "id": id}
         if is_namespace(self.namespace, NameSpace.KV_STORE_LLM_RESPONSE_CACHE):
             array_res = await self.db.query(sql, params, multirows=True)
+            if array_res is None:
+                return None
             res = {}
             for row in array_res:
                 res[row["id"]] = row
@@ -1377,6 +1383,8 @@ class PGGraphStorage(BaseGraphStorage):
         Returns:
             list[dict[str, Any]]: a list of dictionaries containing the result set
         """
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         try:
             if readonly:
                 data = await self.db.query(
@@ -1712,7 +1720,9 @@ class PGGraphStorage(BaseGraphStorage):
         embed_func = self._node_embed_algorithms[algorithm]
         return await embed_func()
 
-    async def get_knowledge_graph(self, node_label: str, max_depth: int = 5) -> KnowledgeGraph:
+    async def get_knowledge_graph(
+        self, node_label: str, max_depth: int = 3, min_degree: int = 0, inclusive: bool = False
+    ) -> KnowledgeGraph:
         """
         Retrieve a subgraph containing the specified node and its neighbors up to the specified depth.
 
@@ -1806,6 +1816,8 @@ class PGGraphStorage(BaseGraphStorage):
 
     async def drop(self) -> None:
         """Drop the storage"""
+        if self.db is None:
+            raise ValueError("Database connection not initialized")
         drop_sql = SQL_TEMPLATES["drop_vdb_entity"]
         await self.db.execute(drop_sql)
         drop_sql = SQL_TEMPLATES["drop_vdb_relation"]
@@ -1827,6 +1839,7 @@ def namespace_to_table_name(namespace: str) -> str:
     for k, v in NAMESPACE_TABLE_MAP.items():
         if is_namespace(namespace, k):
             return v
+    raise ValueError(f"Invalid namespace: {namespace}")
 
 
 TABLES = {
@@ -1859,15 +1872,15 @@ TABLES = {
     },
     "LIGHTRAG_VDB_ENTITY": {
         "ddl": """CREATE TABLE LIGHTRAG_VDB_ENTITY (
-                    id VARCHAR(255),
-                    workspace VARCHAR(255),
-                    entity_name VARCHAR(255),
-                    content TEXT,
-                    content_vector VECTOR,
-                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    update_time TIMESTAMP,
-                    chunk_ids VARCHAR(255)[] NULL,
-                    file_path TEXT NULL,
+                     id VARCHAR(255),
+                     workspace VARCHAR(255),
+                     entity_name TEXT,
+                     content TEXT,
+                     content_vector VECTOR,
+                     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                     update_time TIMESTAMP,
+                     chunk_ids VARCHAR(255)[] NULL,
+                     file_path TEXT NULL,
 	                CONSTRAINT LIGHTRAG_VDB_ENTITY_PK PRIMARY KEY (workspace, id)
                     )"""
     },

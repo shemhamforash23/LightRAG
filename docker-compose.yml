@@ -42,7 +42,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    
+
   lightrag:
     build:
       context: .
@@ -55,7 +55,7 @@ services:
       VERBOSE: ${VERBOSE:-false}
       WORKING_DIR: ${WORKING_DIR:-/app/data/rag_storage}
       INPUT_DIR: ${INPUT_DIR:-/app/data/inputs}
-      
+
       POSTGRES_HOST: postgres
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -79,7 +79,7 @@ services:
       MAX_TOKENS: ${MAX_TOKENS:-32768}
       LIGHTRAG_PROMPT_MODE: ${LIGHTRAG_PROMPT_MODE:-research}
       TEMPERATURE: ${TEMPERATURE:-0.5}
-      
+
       LIGHTRAG_API_KEY: ${LIGHTRAG_API_KEY:-}
       WHITELIST_PATHS: ${WHITELIST_PATHS:-/health,/api/*}
 
@@ -97,7 +97,7 @@ services:
       EMBEDDING_BATCH_NUM: ${EMBEDDING_BATCH_NUM:-32}
       EMBEDDING_FUNC_MAX_ASYNC: ${EMBEDDING_FUNC_MAX_ASYNC:-16}
 
-      
+
       CHUNK_SIZE: ${CHUNK_SIZE:-1200}
       CHUNK_OVERLAP_SIZE: ${CHUNK_OVERLAP_SIZE:-100}
       MAX_TOKEN_SUMMARY: ${MAX_TOKEN_SUMMARY:-500}
@@ -105,7 +105,7 @@ services:
       COSINE_THRESHOLD: ${COSINE_THRESHOLD:-0.2}
       TOP_K: ${TOP_K:-60}
       HISTORY_TURNS: ${HISTORY_TURNS:-3}
-      
+
       OLLAMA_EMULATING_MODEL_TAG: ${OLLAMA_EMULATING_MODEL_TAG:-latest}
       SIMULATED_MODEL_NAME: ${SIMULATED_MODEL_NAME:-lightrag:latest}
       NAMESPACE_PREFIX: ${NAMESPACE_PREFIX:-}

@@ -64,7 +64,9 @@ class JsonKVStorage(BaseKVStorage):
     async def index_done_callback(self) -> None:
         async with self._storage_lock:
             if self.storage_updated.value:
-                data_dict = dict(self._data) if hasattr(self._data, "_getvalue") else self._data
+                data_dict = (
+                    dict(self._data) if hasattr(self._data, "_getvalue") else self._data
+                )
 
                 # Calculate data count based on namespace
                 if self.namespace.endswith("cache"):
@@ -104,7 +106,11 @@ class JsonKVStorage(BaseKVStorage):
     async def get_by_ids(self, ids: list[str]) -> list[dict[str, Any]]:
         async with self._storage_lock:
             return [
-                ({k: v for k, v in self._data[id].items()} if self._data.get(id, None) else None)
+                (
+                    {k: v for k, v in self._data[id].items()}
+                    if self._data.get(id, None)
+                    else None
+                )
                 for id in ids
             ]
 

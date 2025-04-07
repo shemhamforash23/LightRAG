@@ -95,7 +95,11 @@ class UnifiedLock(Generic[T]):
             return self
         except Exception as e:
             # If main lock acquisition fails, release the async lock if it was acquired
-            if not self._is_async and self._async_lock is not None and self._async_lock.locked():
+            if (
+                not self._is_async
+                and self._async_lock is not None
+                and self._async_lock.locked()
+            ):
                 self._async_lock.release()
 
             direct_log(
@@ -141,7 +145,11 @@ class UnifiedLock(Generic[T]):
             )
 
             # If main lock release failed but async lock hasn't been released, try to release it
-            if not main_lock_released and not self._is_async and self._async_lock is not None:
+            if (
+                not main_lock_released
+                and not self._is_async
+                and self._async_lock is not None
+            ):
                 try:
                     direct_log(
                         f"== Lock == Process {self._pid}: Attempting to release async lock after main lock failure",
@@ -484,7 +492,9 @@ async def try_initialize_namespace(namespace: str) -> bool:
                 f"Process {os.getpid()} ready to initialize storage namespace: [{namespace}]"
             )
             return True
-        direct_log(f"Process {os.getpid()} storage namespace already initialized: [{namespace}]")
+        direct_log(
+            f"Process {os.getpid()} storage namespace already initialized: [{namespace}]"
+        )
 
     return False
 
@@ -534,10 +544,14 @@ def finalize_share_data():
 
     # Check if already initialized
     if not _initialized:
-        direct_log(f"Process {os.getpid()} storage data not initialized, nothing to finalize")
+        direct_log(
+            f"Process {os.getpid()} storage data not initialized, nothing to finalize"
+        )
         return
 
-    direct_log(f"Process {os.getpid()} finalizing storage data (multiprocess={_is_multiprocess})")
+    direct_log(
+        f"Process {os.getpid()} finalizing storage data (multiprocess={_is_multiprocess})"
+    )
 
     # In multi-process mode, shut down the Manager
     if _is_multiprocess and _manager is not None:
@@ -562,7 +576,9 @@ def finalize_share_data():
                         if isinstance(flags_list, list):
                             # Clear Value objects in the list
                             for flag in flags_list:
-                                if hasattr(flag, "value"):  # Check if it's a Value object
+                                if hasattr(
+                                    flag, "value"
+                                ):  # Check if it's a Value object
                                     flag.value = False
                             flags_list.clear()
                 except Exception:
@@ -573,7 +589,9 @@ def finalize_share_data():
             _manager.shutdown()
             direct_log(f"Process {os.getpid()} Manager shutdown complete")
         except Exception as e:
-            direct_log(f"Process {os.getpid()} Error shutting down Manager: {e}", level="ERROR")
+            direct_log(
+                f"Process {os.getpid()} Error shutting down Manager: {e}", level="ERROR"
+            )
 
     # Reset global variables
     _manager = None

@@ -74,7 +74,9 @@ class JsonDocStatusStorage(DocStatusStorage):
                 counts[doc["status"]] += 1
         return counts
 
-    async def get_docs_by_status(self, status: DocStatus) -> dict[str, DocProcessingStatus]:
+    async def get_docs_by_status(
+        self, status: DocStatus
+    ) -> dict[str, DocProcessingStatus]:
         """Get all documents with a specific status"""
         result = {}
         async with self._storage_lock:
@@ -98,7 +100,9 @@ class JsonDocStatusStorage(DocStatusStorage):
     async def index_done_callback(self) -> None:
         async with self._storage_lock:
             if self.storage_updated.value:
-                data_dict = dict(self._data) if hasattr(self._data, "_getvalue") else self._data
+                data_dict = (
+                    dict(self._data) if hasattr(self._data, "_getvalue") else self._data
+                )
                 logger.info(
                     f"Process {os.getpid()} doc status writting {len(data_dict)} records to {self.namespace}"
                 )

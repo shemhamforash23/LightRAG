@@ -12,12 +12,16 @@ from typing import Any, Callable, Dict, Optional, Tuple, final
 
 import numpy as np
 import pipmaster as pm
+from opentelemetry import context, trace
+from opentelemetry.trace import Status, StatusCode
 from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
+
+from lightrag.lightrag import tracer
 
 from ..base import BaseGraphStorage
 from ..types import KnowledgeGraph, KnowledgeGraphEdge, KnowledgeGraphNode
@@ -77,6 +81,7 @@ class Neo4jTask:
         args: Tuple,
         kwargs: Dict,
         priority: int = DEFAULT_NEO4J_DEFAULT_PRIORITY,
+        parent_context: Optional[context.Context] = None,
     ):
         self.id = str(uuid.uuid4())
         self.func = func
@@ -84,6 +89,7 @@ class Neo4jTask:
         self.args = args
         self.kwargs = kwargs
         self.priority = priority
+        self.parent_context = parent_context
         self.future: asyncio.Future = asyncio.Future()
         self.start_time = None
         self.end_time = None
@@ -120,119 +126,129 @@ async def neo4j_worker(
             # Set start time
             task.start_time = time.time()
 
-            try:
-                # Get timeout from object attribute or use default value
-                operation_timeout = getattr(
-                    task.instance,
-                    "NEO4J_OPERATION_TIMEOUT",
-                    DEFAULT_NEO4J_OPERATION_TIMEOUT,
-                )
-                long_tx_threshold = getattr(
-                    task.instance,
-                    "LONG_TRANSACTION_THRESHOLD",
-                    DEFAULT_LONG_TX_THRESHOLD,
-                )
+            # Start OpenTelemetry Span
+            operation_name = f"neo4j.{task.func.__name__}"
 
-                # Get function name for logging
-                operation_name = (
-                    f"{task.func.__name__}({', '.join(map(str, task.args))})"
+            # Start OpenTelemetry span using the parent context from the task
+            with tracer.start_as_current_span(
+                operation_name, kind=trace.SpanKind.CLIENT, context=task.parent_context
+            ) as span:
+                span.set_attribute("db.system", "neo4j")
+                span.set_attribute("db.operation", task.func.__name__)
+                # Consider security before adding args/kwargs
+                span.set_attribute(
+                    "db.statement", f"args: {task.args}, kwargs: {task.kwargs}"
                 )
-
-                logger.debug(
-                    f"Worker {worker_id}: Starting task {task.id} - {operation_name}, "
-                    f"timeout: {operation_timeout}s, long_tx_threshold: {long_tx_threshold}s"
-                )
-
-                # Start monitoring for long transaction
-                monitor_task = asyncio.create_task(
-                    monitor_long_transaction(long_tx_threshold, operation_name)
-                )
+                span.set_attribute("neo4j.task.id", task.id)
+                span.set_attribute("neo4j.task.priority", priority_value)
+                span.set_attribute("neo4j.worker.id", worker_id)
 
                 try:
-                    # Acquire semaphore
-                    logger.debug(
-                        f"Worker {worker_id}: Waiting for semaphore for task {task.id}"
+                    # Get timeout from object attribute or use default value
+                    operation_timeout = getattr(
+                        task.instance,
+                        "NEO4J_OPERATION_TIMEOUT",
+                        DEFAULT_NEO4J_OPERATION_TIMEOUT,
                     )
-                    async with semaphore:
-                        logger.debug(
-                            f"Worker {worker_id}: Acquired semaphore for task {task.id}"
-                        )
-
-                        # Add random delay if system is under high load
-                        if random.random() < 0.3:  # 30% chance to add delay
-                            delay = random.uniform(0.05, 0.2)
-                            logger.debug(
-                                f"Worker {worker_id}: Adding delay of {delay:.3f}s for task {task.id}"
-                            )
-                            await asyncio.sleep(delay)
-
-                        # Execute operation with timeout
-                        start_time = time.time()
-                        logger.debug(f"Worker {worker_id}: Executing task {task.id}")
-                        result = await asyncio.wait_for(
-                            task.func(task.instance, *task.args, **task.kwargs),
-                            timeout=operation_timeout,
-                        )
-                        execution_time = time.time() - start_time
-
-                        # Log execution time for long operations
-                        if execution_time > long_tx_threshold / 2:
-                            logger.info(
-                                f"Worker {worker_id}: Operation {operation_name} completed in {execution_time:.2f} seconds"
-                            )
-                        else:
-                            logger.debug(
-                                f"Worker {worker_id}: Operation {operation_name} completed in {execution_time:.2f} seconds"
-                            )
-
-                        # Set result in future
-                        task.future.set_result(result)
-                        logger.debug(
-                            f"Worker {worker_id}: Task {task.id} completed successfully"
-                        )
-
-                except asyncio.TimeoutError:
-                    logger.error(
-                        f"Worker {worker_id}: Operation {operation_name} timed out after {operation_timeout} seconds"
+                    long_tx_threshold = getattr(
+                        task.instance,
+                        "LONG_TRANSACTION_THRESHOLD",
+                        DEFAULT_LONG_TX_THRESHOLD,
                     )
-                    task.future.set_exception(
-                        RuntimeError(
-                            f"Neo4j operation {operation_name} timed out after {operation_timeout} seconds"
-                        )
+
+                    # Get function name for logging
+                    operation_name = (
+                        f"{task.func.__name__}({', '.join(map(str, task.args))})"
                     )
+
+                    # Start monitoring for long transaction
+                    monitor_task = asyncio.create_task(
+                        monitor_long_transaction(long_tx_threshold, operation_name)
+                    )
+
+                    try:
+                        span.add_event("Waiting for semaphore")
+                        async with semaphore:
+                            span.add_event("Acquired semaphore")
+
+                            # Add random delay if system is under high load
+                            if random.random() < 0.3:  # 30% chance to add delay
+                                delay = random.uniform(0.05, 0.2)
+                                span.add_event(
+                                    "Adding artificial delay", {"duration_s": delay}
+                                )
+                                await asyncio.sleep(delay)
+
+                            # Execute operation with timeout
+                            start_time = time.time()
+                            span.add_event("Executing Neo4j function")
+                            result = await asyncio.wait_for(
+                                task.func(task.instance, *task.args, **task.kwargs),
+                                timeout=operation_timeout,
+                            )
+                            execution_time = time.time() - start_time
+                            span.set_attribute("neo4j.execution_time_s", execution_time)
+                            span.add_event("Neo4j function executed")
+
+                            # Set result in future
+                            task.future.set_result(result)
+                            span.set_status(Status(StatusCode.OK))
+
+                    except asyncio.TimeoutError as e:
+                        logger.error(
+                            f"Worker {worker_id}: Operation {operation_name} timed out after {operation_timeout} seconds"
+                        )
+                        span.record_exception(e)
+                        span.set_status(
+                            Status(
+                                StatusCode.ERROR, f"Timeout after {operation_timeout}s"
+                            )
+                        )
+                        task.future.set_exception(
+                            RuntimeError(
+                                f"Neo4j operation {operation_name} timed out after {operation_timeout} seconds"
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Worker {worker_id}: Error in Neo4j operation {operation_name}: {str(e)}"
+                        )
+                        span.record_exception(e)
+                        span.set_status(Status(StatusCode.ERROR, str(e)))
+                        task.future.set_exception(e)
+                    finally:
+                        # Cancel monitoring task
+                        if not monitor_task.done():
+                            monitor_task.cancel()
+                            span.add_event("Cancelled long transaction monitor")
+
                 except Exception as e:
                     logger.error(
-                        f"Worker {worker_id}: Error in Neo4j operation {operation_name}: {str(e)}"
+                        f"Worker {worker_id}: Error processing task {task.id}: {str(e)}"
                     )
-                    task.future.set_exception(e)
-                finally:
-                    # Cancel monitoring task
-                    if not monitor_task.done():
-                        logger.debug(
-                            f"Worker {worker_id}: Cancelling monitoring task for {task.id}"
+                    # Ensure span records the error if setup fails before the inner try block
+                    if trace.get_current_span().is_recording():
+                        span.record_exception(e)
+                        span.set_status(
+                            Status(StatusCode.ERROR, f"Task processing error: {str(e)}")
                         )
-                        monitor_task.cancel()
+                    if not task.future.done():
+                        task.future.set_exception(e)
 
-            except Exception as e:
-                logger.error(
-                    f"Worker {worker_id}: Error processing task {task.id}: {str(e)}"
-                )
-                if not task.future.done():
-                    task.future.set_exception(e)
+                finally:
+                    # Set end time
+                    task.end_time = time.time()
+                    task_duration = task.end_time - task.start_time
+                    span.set_attribute("neo4j.task.total_duration_s", task_duration)
 
-            finally:
-                # Set end time
-                task.end_time = time.time()
-                task_duration = task.end_time - task.start_time
+                    # Log task completion
+                    logger.debug(
+                        f"Worker {worker_id}: Task {task.id} finished in {task_duration:.3f}s, "
+                        f"queue size: {task_queue.qsize()}/{task_queue.maxsize}"
+                    )
 
-                # Log task completion
-                logger.debug(
-                    f"Worker {worker_id}: Task {task.id} finished in {task_duration:.3f}s, "
-                    f"queue size: {task_queue.qsize()}/{task_queue.maxsize}"
-                )
-
-                # Mark task as done
-                task_queue.task_done()
+                    # Mark task as done
+                    task_queue.task_done()
 
         except asyncio.CancelledError:
             logger.info(f"Neo4j worker {worker_id} cancelled")
@@ -255,8 +271,13 @@ def with_semaphore(func):
         # Get priority from kwargs or use default value
         priority = kwargs.pop("priority", DEFAULT_NEO4J_DEFAULT_PRIORITY)
 
-        # Create task
-        task = Neo4jTask(func, self, args, kwargs, priority)
+        # Capture the current OpenTelemetry context
+        current_context = context.get_current()
+
+        # Create task and pass the captured context
+        task = Neo4jTask(
+            func, self, args, kwargs, priority, parent_context=current_context
+        )
 
         # Add task to queue
         await self._task_queue.put((priority, task))
@@ -932,53 +953,86 @@ class Neo4JStorage(BaseGraphStorage):
     )
     @with_semaphore
     async def upsert_edge(
-        self, source_node_id: str, target_node_id: str, edge_data: dict[str, str]
+        self,
+        source_node_id: str,
+        target_node_id: str,
+        relationship_type: str,
+        edge_data: dict = {},
     ) -> None:
         """
-        Upsert an edge and its properties between two nodes identified by their labels.
-        Ensures both source and target nodes exist and are unique before creating the edge.
-        Uses entity_id property to uniquely identify nodes.
+        Upsert an edge with a specific type and properties between two nodes identified by their entity_id.
+        Ensures both source and target nodes exist before creating/updating the edge.
+        Uses apoc.merge.relationship to handle dynamic relationship types.
 
         Args:
-            source_node_id (str): Label of the source node (used as identifier)
-            target_node_id (str): Label of the target node (used as identifier)
-            edge_data (dict): Dictionary of properties to set on the edge
+            source_node_id (str): entity_id of the source node.
+            target_node_id (str): entity_id of the target node.
+            relationship_type (str): The type of the relationship (e.g., 'CALLS', 'IMPLEMENTS'). Will be standardized to UPPER_SNAKE_CASE.
+            edge_data (dict, optional): Dictionary of properties to set/update on the edge. Defaults to {}.
 
         Raises:
-            ValueError: If either source or target node does not exist or is not unique
+            Exception: Propagates exceptions from the database driver during the operation.
         """
         try:
-            edge_properties = edge_data
+            # Standardize relationship type
+            std_relationship_type = relationship_type.strip().upper().replace(" ", "_")
+            if not std_relationship_type:
+                std_relationship_type = (
+                    "RELATED_TO"  # Fallback if empty after processing
+                )
+                logger.warning(
+                    f"Empty relationship type provided for edge ({source_node_id}, {target_node_id}). Using fallback '{std_relationship_type}'."
+                )
+
             async with self._driver.session(database=self._DATABASE) as session:
 
                 async def execute_upsert(tx: AsyncManagedTransaction):
+                    # Using apoc.merge.relationship for dynamic relationship types
+                    # Note: Assumes nodes have the label 'base' and are identified by 'entity_id'
+                    # apoc.merge.relationship(startNode, relationshipType, identProps, props, endNode, onCreateProps)
                     query = """
-                    MATCH (source:base {entity_id: $source_entity_id})
-                    WITH source
-                    MATCH (target:base {entity_id: $target_entity_id})
-                    MERGE (source)-[r:DIRECTED]-(target)
-                    SET r += $properties
-                    RETURN r, source, target
+                    MATCH (a:base {entity_id: $src_id}), (b:base {entity_id: $tgt_id})
+                    CALL apoc.merge.relationship(
+                        a,                    // start node
+                        $rel_type,            // relationship type string
+                        {},                   // properties to match on relationship (usually empty for upsert)
+                        $props,               // properties to set/update on match
+                        b,                    // end node
+                        $props                // properties to set on create (same as on match here)
+                    ) YIELD rel
+                    RETURN rel
                     """
                     result = await tx.run(
                         query,
-                        source_entity_id=source_node_id,
-                        target_entity_id=target_node_id,
-                        properties=edge_properties,
+                        src_id=source_node_id,
+                        tgt_id=target_node_id,
+                        rel_type=std_relationship_type,  # Pass standardized type
+                        props=edge_data,  # Pass edge data as properties
                     )
                     try:
-                        records = await result.fetch(2)
+                        records = await result.fetch(
+                            1
+                        )  # Expecting one record for the created/merged relationship
                         if records:
                             logger.debug(
-                                f"Upserted edge from '{source_node_id}' to '{target_node_id}'"
-                                f"with properties: {edge_properties}"
+                                f"Upserted edge '{std_relationship_type}' from '{source_node_id}' to '{target_node_id}' "
+                                f"with properties: {edge_data}"
+                            )
+                        else:
+                            # This case might indicate an issue, e.g., source or target node not found despite the MATCH
+                            # Although MATCH should fail if nodes don't exist, apoc might behave differently or there's a tx issue.
+                            logger.warning(
+                                f"apoc.merge.relationship did not return a relationship for edge ({source_node_id})-[:{std_relationship_type}]->({target_node_id}). Nodes might not exist or another issue occurred."
                             )
                     finally:
                         await result.consume()  # Ensure result is consumed
 
                 await session.execute_write(execute_upsert)
         except Exception as e:
-            logger.error(f"Error during edge upsert: {str(e)}")
+            logger.error(
+                f"Error during edge upsert ({source_node_id})-[:{relationship_type}]->({target_node_id}): {e}",
+                exc_info=True,  # Include stack trace
+            )
             raise
 
     @with_semaphore

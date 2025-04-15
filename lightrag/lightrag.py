@@ -9,17 +9,27 @@ import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from functools import partial
-from typing import Any, AsyncIterator, Callable, Iterator, Literal, cast, final
+from typing import Any, Callable, Iterator, Literal, cast, final
 
 import pandas as pd
 from dotenv import load_dotenv
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
+from lightrag.core.extract_entities import extract_entities
+from lightrag.core.kg_query import kg_query
+from lightrag.core.mix_kg_vector_query import mix_kg_vector_query
+from lightrag.core.naive_query import naive_query
+from lightrag.core.query_with_keywords import query_with_keywords
 from lightrag.kg import (
     STORAGE_ENV_REQUIREMENTS,
     STORAGES,
     verify_storage_implementation,
 )
 from lightrag.kg.shared_storage import UnifiedLock
+from lightrag.tracing import PostgresSpanRenamer
 
 from .base import (
     BaseGraphStorage,
@@ -33,20 +43,13 @@ from .base import (
     StoragesStatus,
 )
 from .namespace import NameSpace, make_namespace
-from .operate import (
-    chunking_by_token_size,
-    extract_entities,
-    kg_query,
-    mix_kg_vector_query,
-    naive_query,
-    query_with_keywords,
-)
 from .prompt import GRAPH_FIELD_SEP, PROMPTS
 from .types import KnowledgeGraph
 from .utils import (
     EmbeddingFunc,
     always_get_an_event_loop,
     check_storage_env_vars,
+    chunking_by_token_size,
     clean_text,
     compute_mdhash_id,
     convert_response_to_json,
@@ -65,6 +68,16 @@ load_dotenv(dotenv_path=".env", override=False)
 # TODO: TO REMOVE @Yannick
 config = configparser.ConfigParser()
 config.read("config.ini", "utf-8")
+
+# OpenTelemetry configuration
+trace_provider = TracerProvider()
+trace_provider.add_span_processor(SimpleSpanProcessor(OTLPSpanExporter()))
+trace_provider.add_span_processor(PostgresSpanRenamer())
+
+trace.set_tracer_provider(trace_provider)
+
+# Creates a tracer from the global tracer provider
+tracer = trace.get_tracer(__name__)
 
 
 @final
@@ -197,6 +210,7 @@ class LightRAG:
 
     embedding_cache_config: dict[str, Any] = field(
         default_factory=lambda: {
+            # TODO: pass as env variables
             "enabled": False,
             "similarity_threshold": 0.95,
             "use_llm_check": False,
@@ -1181,6 +1195,8 @@ class LightRAG:
                 await self.chunk_entity_relation_graph.upsert_edge(
                     src_id,
                     tgt_id,
+                    # FIXME: no relation_type is passed. Fix this
+                    relationship_type="",
                     edge_data={
                         "weight": weight,
                         "description": description,
@@ -1262,7 +1278,7 @@ class LightRAG:
         query: str,
         param: QueryParam = QueryParam(),
         system_prompt: str | None = None,
-    ) -> str | AsyncIterator[str]:
+    ) -> dict[str, str] | str:
         """
         Perform a async query.
 
@@ -1341,7 +1357,7 @@ class LightRAG:
 
     async def aquery_with_separate_keyword_extraction(
         self, query: str, prompt: str, param: QueryParam = QueryParam()
-    ) -> str | AsyncIterator[str]:
+    ) -> dict[str, str] | str:
         """
         Async version of query_with_separate_keyword_extraction.
 
@@ -1626,6 +1642,7 @@ class LightRAG:
                 edge_data = await self.chunk_entity_relation_graph.get_edge(src, tgt)
                 if edge_data:
                     edge_data["source_id"] = new_source_id
+                    # FIXME: no relation_type is passed. Fix this
                     await self.chunk_entity_relation_graph.upsert_edge(
                         src, tgt, edge_data
                     )
@@ -1947,6 +1964,7 @@ class LightRAG:
 
             # Check if entity is being renamed
             new_entity_name = updated_data.get("entity_name", entity_name)
+            relation_type = updated_data.get("relation_type", "")
             is_renaming = new_entity_name != entity_name
 
             # If renaming, check if new name already exists
@@ -2004,14 +2022,14 @@ class LightRAG:
                             )
                             if source == entity_name:
                                 await self.chunk_entity_relation_graph.upsert_edge(
-                                    new_entity_name, target, edge_data
+                                    new_entity_name, target, relation_type, edge_data
                                 )
                                 relations_to_update.append(
                                     (new_entity_name, target, edge_data)
                                 )
                             else:  # target == entity_name
                                 await self.chunk_entity_relation_graph.upsert_edge(
-                                    source, new_entity_name, edge_data
+                                    source, new_entity_name, relation_type, edge_data
                                 )
                                 relations_to_update.append(
                                     (source, new_entity_name, edge_data)
@@ -2176,6 +2194,7 @@ class LightRAG:
 
             # 2. Update relation information in the graph
             new_edge_data = {**edge_data, **updated_data}
+            # FIXME: no relationship_type is passed. Fix this
             await self.chunk_entity_relation_graph.upsert_edge(
                 source_entity, target_entity, new_edge_data
             )
@@ -2388,6 +2407,7 @@ class LightRAG:
             }
 
             # Add relation to knowledge graph
+            # FIXME: no relationship_type is passed. Fix this
             await self.chunk_entity_relation_graph.upsert_edge(
                 source_entity, target_entity, edge_data
             )

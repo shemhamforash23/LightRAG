@@ -5,18 +5,43 @@ PROMPTS: Dict[str, Any] = {}
 
 # Типы сущностей кода
 PROMPTS["DEFAULT_ENTITY_TYPES"] = [
-    "module",
     "class",
     "function",
     "method",
+    "module",
     "variable",
+    "parameter",
+    "decorator",
+    "import",
+    "exception",
+    "constant",
     "interface",
-    "library",
-    "framework",
+    "type_alias",
+]
+
+# Default relationship types for code
+PROMPTS["DEFAULT_RELATIONSHIP_TYPES"] = [
+    "IMPORTS",
+    "CALLS_FUNCTION",
+    "CALLS_METHOD",
+    "IMPLEMENTS_INTERFACE",
+    "EXTENDS_CLASS",
+    "HAS_ATTRIBUTE",
+    "RETURNS_TYPE",
+    "ACCEPTS_ARGUMENT",
+    "DEFINES_CLASS",
+    "DEFINES_FUNCTION",
+    "USES_VARIABLE",
+    "IS_INSTANCE_OF",
+    "CONTAINS_ELEMENT",
+    "RAISES_EXCEPTION",
+    "HANDLES_EXCEPTION",
+    "ANNOTATED_WITH",
+    "RELATED_TO",  # Generic fallback
 ]
 
 PROMPTS["entity_extraction"] = """---Goal---
-Given a code snippet or documentation that is potentially relevant to this activity and a list of entity types, identify all code entities of those types from the text and all relationships among the identified entities.
+Given a code snippet or file content and a list of entity types, identify all code entities of those types from the text and all relationships among the identified entities.
 Use {language} as output language.
 
 ---Steps---
@@ -210,3 +235,85 @@ When finished, output {completion_delimiter}
 
 ---Output---
 """
+
+PROMPTS["identify_relationship_type"] = """---Goal---
+Given information about two related code entities (source and target) and the description of their relationship, determine the most appropriate relationship type connecting the source entity to the target entity. The relationship type should be concise, descriptive, and in UPPER_SNAKE_CASE format.
+
+---Input Data---
+- Source Entity Name: {source_entity_name}
+- Source Entity Description: {source_entity_description}
+- Target Entity Name: {target_entity_name}
+- Target Entity Description: {target_entity_description}
+- Relationship Description: {relationship_description}
+- Relationship Keywords: {relationship_keywords}
+
+---Instructions---
+1. Analyze the provided information about the source code entity, target code entity, and their relationship based on code analysis or documentation.
+2. Consider the context provided by the entity descriptions and the relationship description/keywords.
+3. Select the most fitting relationship type from the suggested list below, or generate a new specific type if none of the suggestions accurately capture the relationship.
+4. The relationship type MUST be in UPPER_SNAKE_CASE format.
+5. Your response MUST contain ONLY the generated relationship type and nothing else.
+
+---Suggested Relationship Types---
+{default_relationship_types}
+
+---Examples---
+
+Example 1:
+Source Entity Name: process_data
+Source Entity Description: Function that takes raw data and cleans it.
+Target Entity Name: clean_data
+Target Description: Utility function to remove outliers and duplicates.
+Relationship Description: The main process_data function utilizes clean_data internally.
+Relationship Keywords: utility, internal call, function call
+Generated Relationship Type: CALLS_FUNCTION
+
+Example 2:
+Source Entity Name: MyClass
+Source Entity Description: A class representing a custom data structure.
+Target Entity Name: BaseClass
+Target Description: An abstract base class defining a common interface.
+Relationship Description: MyClass inherits from BaseClass.
+Relationship Keywords: inheritance, subclass, parent class
+Generated Relationship Type: EXTENDS_CLASS
+
+Example 3:
+Source Entity Name: main.py
+Source Entity Description: The main script file for the application.
+Target Entity Name: utils.py
+Target Description: A module containing helper functions.
+Relationship Description: main.py imports functions from the utils module.
+Relationship Keywords: import, module, dependency
+Generated Relationship Type: IMPORTS
+
+Example 4:
+Source Entity Name: DatabaseConnection
+Source Entity Description: Class managing the connection to the database.
+Target Entity Name: execute_query
+Target Description: Method that runs a SQL query against the database.
+Relationship Description: The DatabaseConnection class has a method named execute_query.
+Relationship Keywords: method, member function, class member
+Generated Relationship Type: DEFINES_METHOD
+
+Example 5:
+Source Entity Name: User
+Source Entity Description: A class representing a user account.
+Target Entity Name: user_id
+Target Description: An integer attribute storing the unique identifier for the user.
+Relationship Description: The User class contains an attribute 'user_id'.
+Relationship Keywords: attribute, property, member variable, field
+Generated Relationship Type: HAS_ATTRIBUTE
+
+Example 6:
+Source Entity Name: calculate_average
+Source Entity Description: Function that computes the average of a list of numbers.
+Target Entity Name: ValueError
+Target Description: Exception raised when an operation or function receives an argument that has the right type but an inappropriate value.
+Relationship Description: The function calculate_average raises a ValueError if the input list is empty.
+Relationship Keywords: exception, error handling, raises
+Generated Relationship Type: RAISES_EXCEPTION
+
+---Your Task---
+Based on the input data provided above, output the single most appropriate relationship type in UPPER_SNAKE_CASE format.
+
+Generated Relationship Type:"""  # The LLM is expected to complete this line

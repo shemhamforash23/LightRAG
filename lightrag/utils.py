@@ -1,23 +1,25 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import html
 import io
-import csv
 import json
 import logging
 import logging.handlers
 import os
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from functools import wraps
 from hashlib import md5
 from typing import Any, Callable
-import xml.etree.ElementTree as ET
+
 import numpy as np
 import tiktoken
-from lightrag.prompt import PROMPTS
 from dotenv import load_dotenv
+
+from lightrag.prompt import PROMPTS
 
 # use the .env that is inside the current folder
 # allows to use different .env file for each lightrag instance
@@ -307,6 +309,64 @@ def write_json(json_obj, file_name):
         json.dump(json_obj, f, indent=2, ensure_ascii=False)
 
 
+def chunking_by_token_size(
+    content: str,
+    split_by_character: str | None = None,
+    split_by_character_only: bool = False,
+    overlap_token_size: int = 128,
+    max_token_size: int = 1024,
+    tiktoken_model: str = "gpt-4o",
+) -> list[dict[str, Any]]:
+    tokens = encode_string_by_tiktoken(content, model_name=tiktoken_model)
+    results: list[dict[str, Any]] = []
+    if split_by_character:
+        raw_chunks = content.split(split_by_character)
+        new_chunks = []
+        if split_by_character_only:
+            for chunk in raw_chunks:
+                _tokens = encode_string_by_tiktoken(chunk, model_name=tiktoken_model)
+                new_chunks.append((len(_tokens), chunk))
+        else:
+            for chunk in raw_chunks:
+                _tokens = encode_string_by_tiktoken(chunk, model_name=tiktoken_model)
+                if len(_tokens) > max_token_size:
+                    for start in range(
+                        0, len(_tokens), max_token_size - overlap_token_size
+                    ):
+                        chunk_content = decode_tokens_by_tiktoken(
+                            _tokens[start : start + max_token_size],
+                            model_name=tiktoken_model,
+                        )
+                        new_chunks.append(
+                            (min(max_token_size, len(_tokens) - start), chunk_content)
+                        )
+                else:
+                    new_chunks.append((len(_tokens), chunk))
+        for index, (_len, chunk) in enumerate(new_chunks):
+            results.append(
+                {
+                    "tokens": _len,
+                    "content": chunk.strip(),
+                    "chunk_order_index": index,
+                }
+            )
+    else:
+        for index, start in enumerate(
+            range(0, len(tokens), max_token_size - overlap_token_size)
+        ):
+            chunk_content = decode_tokens_by_tiktoken(
+                tokens[start : start + max_token_size], model_name=tiktoken_model
+            )
+            results.append(
+                {
+                    "tokens": min(max_token_size, len(tokens) - start),
+                    "content": chunk_content.strip(),
+                    "chunk_order_index": index,
+                }
+            )
+    return results
+
+
 def encode_string_by_tiktoken(content: str, model_name: str = "gpt-4o"):
     global ENCODER
     if ENCODER is None:
@@ -356,17 +416,52 @@ def is_float_regex(value: str) -> bool:
 
 
 def truncate_list_by_token_size(
-    list_data: list[Any], key: Callable[[Any], str], max_token_size: int
-) -> list[int]:
-    """Truncate a list of data by token size"""
+    list_data: list[Any], max_token_size: int, key: Callable[[Any], str]
+) -> list[Any]:
+    """Truncate a list of data by token size
+
+    Args:
+        list_data: List of data to truncate
+        max_token_size: Maximum token size
+        key: Function to extract text from data for tokenization
+
+    Returns:
+        Truncated list of data
+    """
+    # Handle edge cases
     if max_token_size <= 0:
         return []
+    if not list_data:
+        return []
+
     tokens = 0
+    result = []
+
     for i, data in enumerate(list_data):
-        tokens += len(encode_string_by_tiktoken(key(data)))
-        if tokens > max_token_size:
-            return list_data[:i]
-    return list_data
+        try:
+            # Extract text and ensure it's a string
+            text = key(data)
+            if text is None:
+                text = ""
+
+            # Count tokens
+            token_count = len(encode_string_by_tiktoken(text))
+
+            # Check if adding this item would exceed the limit
+            if tokens + token_count > max_token_size and result:
+                # Return what we have so far if adding this would exceed the limit
+                return result
+
+            # Add item and update token count
+            tokens += token_count
+            result.append(data)
+
+        except Exception as e:
+            logger.warning(f"Error tokenizing item {i}: {e}")
+            # Skip this item if there's an error
+            continue
+
+    return result
 
 
 def list_of_list_to_csv(data: list[list[str]]) -> str:

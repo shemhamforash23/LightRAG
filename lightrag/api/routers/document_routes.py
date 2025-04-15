@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import aiofiles
 import pipmaster as pm
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AnyUrl, BaseModel, Field, field_validator
 
 from lightrag import LightRAG
 from lightrag.api.utils_api import (
@@ -278,13 +278,60 @@ async def pipeline_enqueue_file(rag: LightRAG, file_path: Path) -> bool:
                     return False
             case ".pdf":
                 if global_args["main_args"].document_loading_engine == "DOCLING":
+                    logger.debug("Using DOCLING for PDF processing")
                     if not pm.is_installed("docling"):  # type: ignore
                         pm.install("docling")
-                    from docling.document_converter import DocumentConverter  # type: ignore
+                    from docling.datamodel.base_models import InputFormat
+                    from docling.datamodel.pipeline_options import (
+                        PdfPipelineOptions,
+                        PictureDescriptionApiOptions,
+                    )
+                    from docling.document_converter import (
+                        DocumentConverter,  # type: ignore
+                        PdfFormatOption,
+                    )
 
-                    converter = DocumentConverter()
+                    def remote_llm_options(model: str):
+                        logger.debug(
+                            f"Using remote LLM {model} for PDF image description"
+                        )
+                        options = PictureDescriptionApiOptions(
+                            url=AnyUrl(
+                                f"{global_args['main_args'].llm_binding_host}/chat/completions"  # type: ignore
+                            ),
+                            headers=dict(
+                                Authorization=f"Bearer {global_args['main_args'].llm_binding_api_key}"  # type: ignore
+                            ),
+                            params=dict(
+                                model=model,
+                                seed=42,
+                                max_completion_tokens=1000,
+                            ),
+                            prompt="Describe the image in three sentences. Be concise and accurate.",
+                            timeout=90,
+                        )
+                        return options
+
+                    pipeline_options = PdfPipelineOptions(
+                        enable_remote_services=True,  # <-- this is required!
+                        do_picture_description=True,
+                        do_formula_enrichment=True,
+                        do_table_structure=True,
+                        picture_description_options=remote_llm_options(
+                            model="llama-3.2-11b-vision-preview"
+                        ),
+                    )
+
+                    converter = DocumentConverter(
+                        format_options={
+                            InputFormat.PDF: PdfFormatOption(
+                                pipeline_options=pipeline_options
+                            )
+                        }
+                    )
                     result = converter.convert(file_path)
                     content = result.document.export_to_markdown()
+                    logger.debug(f"Content extracted from PDF: {len(content)}")
                 else:
                     if not pm.is_installed("pypdf2"):  # type: ignore
                         pm.install("pypdf2")

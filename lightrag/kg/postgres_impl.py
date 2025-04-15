@@ -321,6 +321,8 @@ class PGKVStorage(BaseKVStorage):
         params = {"workspace": self.db.workspace}
         if is_namespace(self.namespace, NameSpace.KV_STORE_LLM_RESPONSE_CACHE):
             array_res = await self.db.query(sql, params, multirows=True)
+            if array_res is None:
+                return []
             modes = set()
             dict_res: dict[str, dict] = {}
             for row in array_res:
@@ -332,7 +334,10 @@ class PGKVStorage(BaseKVStorage):
                 dict_res[row["mode"]][row["id"]] = row
             return [{k: v} for k, v in dict_res.items()]
         else:
-            return await self.db.query(sql, params, multirows=True)
+            result = await self.db.query(sql, params, multirows=True)
+            if result is None:
+                return []
+            return result
 
     async def get_by_status(self, status: str) -> Union[list[dict[str, Any]], None]:
         """Specifically for llm_response_cache."""
@@ -668,24 +673,42 @@ class PGVectorStorage(BaseVectorStorage):
         embedding = embeddings[0]
         embedding_string = ",".join(map(str, embedding))
 
-        if self.db is None:
+        if self.db is None or self.db.pool is None:  # Check pool existence
             raise ValueError("Database connection not initialized")
 
-        if ids:
-            formatted_ids = ",".join(f"'{id}'" for id in ids)
-        else:
-            formatted_ids = "NULL"
+        raw_sql = SQL_TEMPLATES[self.base_namespace]  # Get template
 
-        sql = SQL_TEMPLATES[self.base_namespace].format(
-            embedding_string=embedding_string, doc_ids=formatted_ids
-        )
-        params = {
-            "workspace": self.db.workspace,
-            "better_than_threshold": self.cosine_better_than_threshold,
-            "top_k": top_k,
-        }
-        results = await self.db.query(sql, params=params, multirows=True)
-        return results
+        # Build the base parameters ($1 to $4)
+        base_params: list[Any] = [
+            self.db.workspace,  # $1
+            self.cosine_better_than_threshold,  # $2
+            top_k,  # $3
+            f"[{embedding_string}]",  # $4
+        ]
+
+        # Add the 5th parameter (ids) only if the namespace is 'chunks'
+        if self.base_namespace == "chunks":
+            params_to_pass = base_params + [ids]  # $5
+        else:
+            params_to_pass = base_params
+
+        try:
+            # Acquire connection and execute directly
+            async with self.db.pool.acquire() as connection:
+                rows = await connection.fetch(
+                    raw_sql, *params_to_pass
+                )  # Pass correct params
+            if rows:
+                columns = [col for col in rows[0].keys()]
+                data = [dict(zip(columns, row)) for row in rows]
+            else:
+                data = []
+            return data
+        except Exception as e:
+            logger.error(
+                f"PGVectorStorage query error: {e}\nSQL: {raw_sql}\nParams: {params_to_pass[:4]}..."
+            )  # Log params safely
+            raise
 
     async def index_done_callback(self) -> None:
         # PG handles persistence automatically
@@ -1899,86 +1922,86 @@ def namespace_to_table_name(namespace: str) -> str:
 TABLES = {
     "LIGHTRAG_DOC_FULL": {
         "ddl": """CREATE TABLE LIGHTRAG_DOC_FULL (
-                    id VARCHAR(255),
-                    workspace VARCHAR(255),
-                    doc_name VARCHAR(1024),
-                    content TEXT,
-                    meta JSONB,
-                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    update_time TIMESTAMP,
-	                CONSTRAINT LIGHTRAG_DOC_FULL_PK PRIMARY KEY (workspace, id)
+                        id VARCHAR(255),
+                        workspace VARCHAR(255),
+                        doc_name VARCHAR(1024),
+                        content TEXT,
+                        meta JSONB,
+                        create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        update_time TIMESTAMP,
+                        CONSTRAINT LIGHTRAG_DOC_FULL_PK PRIMARY KEY (workspace, id)
                     )"""
     },
     "LIGHTRAG_DOC_CHUNKS": {
         "ddl": """CREATE TABLE LIGHTRAG_DOC_CHUNKS (
-                    id VARCHAR(255),
-                    workspace VARCHAR(255),
-                    full_doc_id VARCHAR(256),
-                    chunk_order_index INTEGER,
-                    tokens INTEGER,
-                    content TEXT,
-                    content_vector VECTOR,
-                    file_path VARCHAR(256),
-                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    update_time TIMESTAMP,
-	                CONSTRAINT LIGHTRAG_DOC_CHUNKS_PK PRIMARY KEY (workspace, id)
+                        id VARCHAR(255),
+                        workspace VARCHAR(255),
+                        full_doc_id VARCHAR(256),
+                        chunk_order_index INTEGER,
+                        tokens INTEGER,
+                        content TEXT,
+                        content_vector VECTOR,
+                        file_path VARCHAR(256),
+                        create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        update_time TIMESTAMP,
+                        CONSTRAINT LIGHTRAG_DOC_CHUNKS_PK PRIMARY KEY (workspace, id)
                     )"""
     },
     "LIGHTRAG_VDB_ENTITY": {
         "ddl": """CREATE TABLE LIGHTRAG_VDB_ENTITY (
-                     id VARCHAR(255),
-                     workspace VARCHAR(255),
-                     entity_name TEXT,
-                     content TEXT,
-                     content_vector VECTOR,
-                     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                     update_time TIMESTAMP,
-                     chunk_ids VARCHAR(255)[] NULL,
-                     file_path TEXT NULL,
-	                CONSTRAINT LIGHTRAG_VDB_ENTITY_PK PRIMARY KEY (workspace, id)
+                        id VARCHAR(255),
+                        workspace VARCHAR(255),
+                        entity_name TEXT,
+                        content TEXT,
+                        content_vector VECTOR,
+                        create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        update_time TIMESTAMP,
+                        chunk_ids VARCHAR(255)[] NULL,
+                        file_path TEXT NULL,
+	                    CONSTRAINT LIGHTRAG_VDB_ENTITY_PK PRIMARY KEY (workspace, id)
                     )"""
     },
     "LIGHTRAG_VDB_RELATION": {
         "ddl": """CREATE TABLE LIGHTRAG_VDB_RELATION (
-                    id VARCHAR(255),
-                    workspace VARCHAR(255),
-                    source_id VARCHAR(256),
-                    target_id VARCHAR(256),
-                    content TEXT,
-                    content_vector VECTOR,
-                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    update_time TIMESTAMP,
-                    chunk_ids VARCHAR(255)[] NULL,
-                    file_path TEXT NULL,
-	                CONSTRAINT LIGHTRAG_VDB_RELATION_PK PRIMARY KEY (workspace, id)
+                        id VARCHAR(255),
+                        workspace VARCHAR(255),
+                        source_id VARCHAR(256),
+                        target_id VARCHAR(256),
+                        content TEXT,
+                        content_vector VECTOR,
+                        create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        update_time TIMESTAMP,
+                        chunk_ids VARCHAR(255)[] NULL,
+                        file_path TEXT NULL,
+                        CONSTRAINT LIGHTRAG_VDB_RELATION_PK PRIMARY KEY (workspace, id)
                     )"""
     },
     "LIGHTRAG_LLM_CACHE": {
         "ddl": """CREATE TABLE LIGHTRAG_LLM_CACHE (
-	                workspace varchar(255) NOT NULL,
-	                id varchar(255) NOT NULL,
-	                mode varchar(32) NOT NULL,
-                    original_prompt TEXT,
-                    return_value TEXT,
-                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    update_time TIMESTAMP,
-	                CONSTRAINT LIGHTRAG_LLM_CACHE_PK PRIMARY KEY (workspace, mode, id)
+                        workspace varchar(255) NOT NULL,
+                        id varchar(255) NOT NULL,
+                        mode varchar(32) NOT NULL,
+                        original_prompt TEXT,
+                        return_value TEXT,
+                        create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        update_time TIMESTAMP,
+                        CONSTRAINT LIGHTRAG_LLM_CACHE_PK PRIMARY KEY (workspace, mode, id)
                     )"""
     },
     "LIGHTRAG_DOC_STATUS": {
         "ddl": """CREATE TABLE LIGHTRAG_DOC_STATUS (
-	               workspace varchar(255) NOT NULL,
-	               id varchar(255) NOT NULL,
-	               content TEXT NULL,
-	               content_summary varchar(255) NULL,
-	               content_length int4 NULL,
-	               chunks_count int4 NULL,
-	               status varchar(64) NULL,
-	               file_path TEXT NULL,
-	               created_at timestamp DEFAULT CURRENT_TIMESTAMP NULL,
-	               updated_at timestamp DEFAULT CURRENT_TIMESTAMP NULL,
-	               CONSTRAINT LIGHTRAG_DOC_STATUS_PK PRIMARY KEY (workspace, id)
-	              )"""
+                    workspace varchar(255) NOT NULL,
+                    id varchar(255) NOT NULL,
+                    content TEXT NULL,
+                    content_summary varchar(255) NULL,
+                    content_length int4 NULL,
+                    chunks_count int4 NULL,
+                    status varchar(64) NULL,
+                    file_path TEXT NULL,
+                    created_at timestamp DEFAULT CURRENT_TIMESTAMP NULL,
+                    updated_at timestamp DEFAULT CURRENT_TIMESTAMP NULL,
+                    CONSTRAINT LIGHTRAG_DOC_STATUS_PK PRIMARY KEY (workspace, id)
+	            )"""
     },
 }
 
@@ -1989,86 +2012,85 @@ SQL_TEMPLATES = {
                                 FROM LIGHTRAG_DOC_FULL WHERE workspace=$1 AND id=$2
                             """,
     "get_by_id_text_chunks": """SELECT id, tokens, COALESCE(content, '') as content,
-                                chunk_order_index, full_doc_id
+                                chunk_order_index, full_doc_id, file_path
                                 FROM LIGHTRAG_DOC_CHUNKS WHERE workspace=$1 AND id=$2
                             """,
     "get_by_id_llm_response_cache": """SELECT id, original_prompt, COALESCE(return_value, '') as "return", mode
-                                FROM LIGHTRAG_LLM_CACHE WHERE workspace=$1 AND mode=$2
-                               """,
-    "get_by_mode_id_llm_response_cache": """SELECT id, original_prompt, COALESCE(return_value, '') as "return", mode
-                           FROM LIGHTRAG_LLM_CACHE WHERE workspace=$1 AND mode=$2 AND id=$3
-                          """,
-    "get_by_ids_full_docs": """SELECT id, COALESCE(content, '') as content
-                                 FROM LIGHTRAG_DOC_FULL WHERE workspace=$1 AND id IN ({ids})
-                            """,
-    "get_by_ids_text_chunks": """SELECT id, tokens, COALESCE(content, '') as content,
-                                  chunk_order_index, full_doc_id
-                                   FROM LIGHTRAG_DOC_CHUNKS WHERE workspace=$1 AND id IN ({ids})
+                                        FROM LIGHTRAG_LLM_CACHE WHERE workspace=$1 AND mode=$2
                                 """,
+    "get_by_mode_id_llm_response_cache": """SELECT id, original_prompt, COALESCE(return_value, '') as "return", mode
+                                                FROM LIGHTRAG_LLM_CACHE WHERE workspace=$1 AND mode=$2 AND id=$3
+                                    """,
+    "get_by_ids_full_docs": """SELECT id, COALESCE(content, '') as content
+                                    FROM LIGHTRAG_DOC_FULL WHERE workspace=$1 AND id IN ({ids})
+                            """,
+    "get_by_ids_text_chunks": """SELECT
+                                    id,
+                                    content,
+                                    file_path,
+                                    full_doc_id,
+                                    tokens
+                                FROM LIGHTRAG_DOC_CHUNKS
+                                WHERE workspace=$1 AND id = ANY(ARRAY[{ids}])
+                            """,
     "get_by_ids_llm_response_cache": """SELECT id, original_prompt, COALESCE(return_value, '') as "return", mode
-                                 FROM LIGHTRAG_LLM_CACHE WHERE workspace=$1 AND mode= IN ({ids})
+                                            FROM LIGHTRAG_LLM_CACHE WHERE workspace=$1 AND mode= IN ({ids})
                                 """,
     "filter_keys": "SELECT id FROM {table_name} WHERE workspace=$1 AND id IN ({ids})",
     "upsert_doc_full": """INSERT INTO LIGHTRAG_DOC_FULL (id, content, workspace)
-                        VALUES ($1, $2, $3)
-                        ON CONFLICT (workspace,id) DO UPDATE
-                           SET content = $2, update_time = CURRENT_TIMESTAMP
-                       """,
+                            VALUES ($1, $2, $3)
+                            ON CONFLICT (workspace,id) DO UPDATE
+                                SET content = $2, update_time = CURRENT_TIMESTAMP
+                        """,
     "upsert_llm_response_cache": """INSERT INTO LIGHTRAG_LLM_CACHE(workspace,id,original_prompt,return_value,mode)
-                                      VALUES ($1, $2, $3, $4, $5)
-                                      ON CONFLICT (workspace,mode,id) DO UPDATE
-                                      SET original_prompt = EXCLUDED.original_prompt,
-                                      return_value=EXCLUDED.return_value,
-                                      mode=EXCLUDED.mode,
-                                      update_time = CURRENT_TIMESTAMP
-                                     """,
+                                        VALUES ($1, $2, $3, $4, $5)
+                                        ON CONFLICT (workspace,mode,id) DO UPDATE
+                                        SET original_prompt = EXCLUDED.original_prompt,
+                                        return_value=EXCLUDED.return_value,
+                                        mode=EXCLUDED.mode,
+                                        update_time = CURRENT_TIMESTAMP
+                                    """,
     "upsert_chunk": """INSERT INTO LIGHTRAG_DOC_CHUNKS (workspace, id, tokens,
-                      chunk_order_index, full_doc_id, content, content_vector, file_path)
-                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                      ON CONFLICT (workspace,id) DO UPDATE
-                      SET tokens=EXCLUDED.tokens,
-                      chunk_order_index=EXCLUDED.chunk_order_index,
-                      full_doc_id=EXCLUDED.full_doc_id,
-                      content = EXCLUDED.content,
-                      content_vector=EXCLUDED.content_vector,
-                      file_path=EXCLUDED.file_path,
-                      update_time = CURRENT_TIMESTAMP
-                     """,
+                        chunk_order_index, full_doc_id, content, content_vector, file_path)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        ON CONFLICT (workspace,id) DO UPDATE
+                        SET tokens=EXCLUDED.tokens,
+                        chunk_order_index=EXCLUDED.chunk_order_index,
+                        full_doc_id=EXCLUDED.full_doc_id,
+                        content = EXCLUDED.content,
+                        content_vector=EXCLUDED.content_vector,
+                        file_path=EXCLUDED.file_path,
+                        update_time = CURRENT_TIMESTAMP
+                    """,
     "upsert_entity": """INSERT INTO LIGHTRAG_VDB_ENTITY (workspace, id, entity_name, content,
-                      content_vector, chunk_ids, file_path)
-                      VALUES ($1, $2, $3, $4, $5, $6::varchar[], $7)
-                      ON CONFLICT (workspace,id) DO UPDATE
-                      SET entity_name=EXCLUDED.entity_name,
-                      content=EXCLUDED.content,
-                      content_vector=EXCLUDED.content_vector,
-                      chunk_ids=EXCLUDED.chunk_ids,
-                      file_path=EXCLUDED.file_path,
-                      update_time=CURRENT_TIMESTAMP
-                     """,
+                        content_vector, chunk_ids, file_path)
+                        VALUES ($1, $2, $3, $4, $5, $6::varchar[], $7)
+                        ON CONFLICT (workspace,id) DO UPDATE
+                        SET entity_name=EXCLUDED.entity_name,
+                        content=EXCLUDED.content,
+                        content_vector=EXCLUDED.content_vector,
+                        chunk_ids=EXCLUDED.chunk_ids,
+                        file_path=EXCLUDED.file_path,
+                        update_time=CURRENT_TIMESTAMP
+                    """,
     "upsert_relationship": """INSERT INTO LIGHTRAG_VDB_RELATION (workspace, id, source_id,
-                      target_id, content, content_vector, chunk_ids, file_path)
-                      VALUES ($1, $2, $3, $4, $5, $6, $7::varchar[], $8)
-                      ON CONFLICT (workspace,id) DO UPDATE
-                      SET source_id=EXCLUDED.source_id,
-                      target_id=EXCLUDED.target_id,
-                      content=EXCLUDED.content,
-                      content_vector=EXCLUDED.content_vector,
-                      chunk_ids=EXCLUDED.chunk_ids,
-                      file_path=EXCLUDED.file_path,
-                      update_time = CURRENT_TIMESTAMP
-                     """,
+                                target_id, content, content_vector, chunk_ids, file_path)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7::varchar[], $8)
+                                ON CONFLICT (workspace,id) DO UPDATE
+                                SET source_id=EXCLUDED.source_id,
+                                target_id=EXCLUDED.target_id,
+                                content=EXCLUDED.content,
+                                content_vector=EXCLUDED.content_vector,
+                                chunk_ids=EXCLUDED.chunk_ids,
+                                file_path=EXCLUDED.file_path,
+                                update_time = CURRENT_TIMESTAMP
+                    """,
     # SQL for VectorStorage
     "entities": """
-        WITH relevant_chunks AS (
-            SELECT id as chunk_id
-            FROM LIGHTRAG_DOC_CHUNKS
-            WHERE {doc_ids} IS NULL OR full_doc_id = ANY(ARRAY[{doc_ids}])
-        )
-        SELECT entity_name FROM
+        SELECT entity_name, distance as score FROM
             (
-                SELECT e.id, e.entity_name, 1 - (e.content_vector <=> '[{embedding_string}]'::vector) as distance
+                SELECT e.id, e.entity_name, 1 - (e.content_vector <=> $4::vector) as distance
                 FROM LIGHTRAG_VDB_ENTITY e
-                JOIN relevant_chunks c ON c.chunk_id = ANY(e.chunk_ids)
                 WHERE e.workspace=$1
             ) as entity_distances
         WHERE distance>$2
@@ -2076,61 +2098,52 @@ SQL_TEMPLATES = {
         LIMIT $3
     """,
     "relationships": """
-    WITH relevant_chunks AS (
-        SELECT id as chunk_id
-        FROM LIGHTRAG_DOC_CHUNKS
-        WHERE {doc_ids} IS NULL OR full_doc_id = ANY(ARRAY[{doc_ids}])
-    )
-    SELECT source_id as src_id, target_id as tgt_id
-    FROM (
-        SELECT r.id, r.source_id, r.target_id, 1 - (r.content_vector <=> '[{embedding_string}]'::vector) as distance
-        FROM LIGHTRAG_VDB_RELATION r
-        JOIN relevant_chunks c ON c.chunk_id = ANY(r.chunk_ids)
-        WHERE r.workspace=$1
-    ) as relation_distances
-    WHERE distance>$2
-    ORDER BY distance DESC
-    LIMIT $3
+        SELECT source_id as src_id, target_id as tgt_id, distance as score
+        FROM (
+            SELECT r.id, r.source_id, r.target_id, 1 - (r.content_vector <=> $4::vector) as distance
+            FROM LIGHTRAG_VDB_RELATION r
+            WHERE r.workspace=$1
+        ) as relation_distances
+        WHERE distance>$2
+        ORDER BY distance DESC
+        LIMIT $3
     """,
     "chunks": """
-        WITH relevant_chunks AS (
-            SELECT id as chunk_id
-            FROM LIGHTRAG_DOC_CHUNKS
-            WHERE {doc_ids} IS NULL OR full_doc_id = ANY(ARRAY[{doc_ids}])
-        )
-        SELECT id FROM
+        SELECT id, distance as score FROM
             (
-                SELECT id, 1 - (content_vector <=> '[{embedding_string}]'::vector) as distance
+                SELECT
+                    id,
+                    1 - (content_vector <=> $4::vector) as distance -- $4 = embedding
                 FROM LIGHTRAG_DOC_CHUNKS
-                where workspace=$1
-                AND id IN (SELECT chunk_id FROM relevant_chunks)
+                WHERE workspace = $1 -- $1 = workspace
+                    AND id = ANY($5::varchar[]) -- $5 = список ID чанков
             ) as chunk_distances
-            WHERE distance>$2
-            ORDER BY distance DESC
-            LIMIT $3
+        WHERE distance > $2 -- $2 = threshold
+        ORDER BY distance DESC
+        LIMIT $3 -- $3 = top_k
     """,
     # DROP tables
     "drop_all": """
-	    DROP TABLE IF EXISTS LIGHTRAG_DOC_FULL CASCADE;
-	    DROP TABLE IF EXISTS LIGHTRAG_DOC_CHUNKS CASCADE;
-	    DROP TABLE IF EXISTS LIGHTRAG_LLM_CACHE CASCADE;
-	    DROP TABLE IF EXISTS LIGHTRAG_VDB_ENTITY CASCADE;
-	    DROP TABLE IF EXISTS LIGHTRAG_VDB_RELATION CASCADE;
-       """,
+            DROP TABLE IF EXISTS LIGHTRAG_DOC_FULL CASCADE;
+            DROP TABLE IF EXISTS LIGHTRAG_DOC_CHUNKS CASCADE;
+            DROP TABLE IF EXISTS LIGHTRAG_LLM_CACHE CASCADE;
+            DROP TABLE IF EXISTS LIGHTRAG_VDB_ENTITY CASCADE;
+            DROP TABLE IF EXISTS LIGHTRAG_VDB_RELATION CASCADE;
+        """,
     "drop_doc_full": """
-	    DROP TABLE IF EXISTS LIGHTRAG_DOC_FULL CASCADE;
-        DROP TABLE IF EXISTS LIGHTRAG_DOC_STATUS CASCADE;
-       """,
+            DROP TABLE IF EXISTS LIGHTRAG_DOC_FULL CASCADE;
+            DROP TABLE IF EXISTS LIGHTRAG_DOC_STATUS CASCADE;
+        """,
     "drop_doc_chunks": """
-	    DROP TABLE IF EXISTS LIGHTRAG_DOC_CHUNKS CASCADE;
-       """,
+	        DROP TABLE IF EXISTS LIGHTRAG_DOC_CHUNKS CASCADE;
+        """,
     "drop_llm_cache": """
-	    DROP TABLE IF EXISTS LIGHTRAG_LLM_CACHE CASCADE;
-       """,
+	        DROP TABLE IF EXISTS LIGHTRAG_LLM_CACHE CASCADE;
+        """,
     "drop_vdb_entity": """
-	    DROP TABLE IF EXISTS LIGHTRAG_VDB_ENTITY CASCADE;
-       """,
+	        DROP TABLE IF EXISTS LIGHTRAG_VDB_ENTITY CASCADE;
+        """,
     "drop_vdb_relation": """
-	    DROP TABLE IF EXISTS LIGHTRAG_VDB_RELATION CASCADE;
-       """,
+	        DROP TABLE IF EXISTS LIGHTRAG_VDB_RELATION CASCADE;
+        """,
 }

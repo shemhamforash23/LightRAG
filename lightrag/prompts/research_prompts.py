@@ -19,6 +19,27 @@ PROMPTS["DEFAULT_ENTITY_TYPES"] = [
     "future_work",
 ]
 
+# Default relationship types for research papers
+PROMPTS["DEFAULT_RELATIONSHIP_TYPES"] = [
+    "CITES",
+    "BUILDS_UPON",
+    "COMPARES_WITH",
+    "CONTRASTS_WITH",
+    "USES_METHOD",
+    "USES_DATASET",
+    "APPLIES_TO",
+    "ACHIEVES_RESULT",
+    "ADDRESSES_LIMITATION",
+    "SUGGESTS_FUTURE_WORK",
+    "AUTHORED_BY",
+    "AFFILIATED_WITH",
+    "PART_OF",
+    "EVALUATES",
+    "PROPOSES",
+    "DEFINES_CONCEPT",
+    "RELATED_TO",  # Generic fallback
+]
+
 PROMPTS["entity_extraction"] = """---Goal---
 Given a research paper or scientific text that is potentially relevant to this activity and a list of entity types, identify all research entities of those types from the text and all relationships among the identified entities.
 Use {language} as output language.
@@ -175,3 +196,78 @@ When finished, output {completion_delimiter}
 
 ---Output---
 """
+
+PROMPTS["identify_relationship_type"] = """---Goal---
+Given information about two related entities (source and target) and the description of their relationship,
+determine the most appropriate relationship type connecting the source entity to the target entity.
+The relationship type should be concise, descriptive, and in UPPER_SNAKE_CASE format.
+
+---Input Data---
+- Source Entity Name: {source_entity_name}
+- Source Entity Description: {source_entity_description}
+- Target Entity Name: {target_entity_name}
+- Target Entity Description: {target_entity_description}
+- Relationship Description: {relationship_description}
+- Relationship Keywords: {relationship_keywords}
+
+---Instructions---
+1. Analyze the provided information about the source entity, target entity, and their relationship.
+2. Consider the context provided by the entity descriptions and the relationship description/keywords.
+3. Select the most fitting relationship type from the suggested list below, or generate a new specific type if none of the suggestions accurately capture the relationship.
+4. The relationship type MUST be in UPPER_SNAKE_CASE format.
+5. Your response MUST contain ONLY the generated relationship type and nothing else.
+
+---Suggested Relationship Types---
+{default_relationship_types}
+
+---Examples---
+
+Example 1:
+Source Entity Name: BERT
+Source Entity Description: Bidirectional Encoder Representations from Transformers, a language representation model.
+Target Entity Name: Transformer Architecture
+Target Entity Description: A novel network architecture based solely on attention mechanisms.
+Relationship Description: BERT's architecture is based on the Transformer model.
+Relationship Keywords: architecture, foundation, based on
+Generated Relationship Type: BASED_ON_ARCHITECTURE
+
+Example 2:
+Source Entity Name: Paper A
+Source Entity Description: A study on the effects of caffeine on memory retention.
+Target Entity Name: Paper B
+Target Entity Description: An earlier study investigating general stimulant effects on cognitive function.
+Relationship Description: Paper A cites Paper B in its literature review section.
+Relationship Keywords: citation, reference, background
+Generated Relationship Type: CITES
+
+Example 3:
+Source Entity Name: CNN Model X
+Source Entity Description: A convolutional neural network designed for image classification.
+Target Entity Name: ImageNet Dataset
+Target Entity Description: A large visual database designed for use in visual object recognition research.
+Relationship Description: CNN Model X was trained and evaluated using the ImageNet dataset.
+Relationship Keywords: training, evaluation, dataset usage
+Generated Relationship Type: TRAINED_ON_DATASET
+
+Example 4:
+Source Entity Name: Gradient Descent
+Source Entity Description: An iterative first-order optimisation algorithm used to find a local minimum/maximum of a given function.
+Target Entity Name: Neural Network Training
+Target Entity Description: The process of teaching artificial neural networks using sample data.
+Relationship Description: Gradient Descent is a common optimization method employed during neural network training.
+Relationship Keywords: optimization, training method, algorithm usage
+Generated Relationship Type: USED_IN_PROCESS
+
+Example 5:
+Source Entity Name: AlphaFold 2
+Source Entity Description: An AI system developed by DeepMind that performs predictions of protein structure.
+Target Entity Name: CASP14
+Target Entity Description: The 14th Community Wide Experiment on the Critical Assessment of Techniques for Protein Structure Prediction.
+Relationship Description: AlphaFold 2 demonstrated unprecedented levels of accuracy in the CASP14 protein folding competition.
+Relationship Keywords: evaluation, competition, performance, benchmark
+Generated Relationship Type: EVALUATED_IN_COMPETITION
+
+---Your Task---
+Based on the input data provided above, output the single most appropriate relationship type in UPPER_SNAKE_CASE format.
+
+Generated Relationship Type:"""  # The LLM is expected to complete this line

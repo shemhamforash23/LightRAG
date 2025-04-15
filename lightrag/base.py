@@ -29,6 +29,7 @@ class TextChunkSchema(TypedDict):
     content: str
     full_doc_id: str
     chunk_order_index: int
+    file_path: str
 
 
 T = TypeVar("T")
@@ -282,9 +283,13 @@ class BaseGraphStorage(StorageNameSpace, ABC):
 
     @abstractmethod
     async def upsert_edge(
-        self, source_node_id: str, target_node_id: str, edge_data: dict[str, str]
+        self,
+        source_node_id: str,
+        target_node_id: str,
+        relationship_type: str,
+        edge_data: dict = {},
     ) -> None:
-        """Delete a node from the graph."""
+        """Upsert an edge (relationship) between two nodes in the graph with a specific type."""
 
     @abstractmethod
     async def delete_node(self, node_id: str) -> None:
@@ -392,3 +397,30 @@ class StoragesStatus(str, Enum):
     CREATED = "created"
     INITIALIZED = "initialized"
     FINALIZED = "finalized"
+
+
+@dataclass
+class NodeData:
+    entity_name: str
+    description: str | None = None
+    source_id: str | None = None  # Can be multiple, joined by GRAPH_FIELD_SEP
+    vdb_score: float | None = None  # Score from vector DB query
+    entity_type: str | None = None  # Type of entity (e.g., "concept", "model", etc.)
+    created_at: str | None = None  # Creation timestamp
+    file_path: str | None = None  # Path to the file containing the entity
+    # Add other relevant fields if needed
+
+
+@dataclass
+class EdgeData:
+    source: str
+    target: str
+    description: str | None = None
+    keywords: str | None = None
+    source_id: str | None = None  # Can be multiple, joined by GRAPH_FIELD_SEP
+    weight: float | None = None
+    vdb_score: float | None = None  # Score from vector DB query
+    rank: int | None = None  # Optional rank if pre-computed
+    created_at: str | None = None  # Creation timestamp
+    file_path: str | None = None  # Path to the file containing the edge
+    # Add other relevant fields if needed

@@ -1,9 +1,15 @@
 aiohttp
 configparser
+
+docling
 future
 
 # Basic modules
 gensim
+neo4j
+opentelemetry-api
+opentelemetry-distro
+opentelemetry-exporter-otlp
 
 # Additional Packages for export Functionality
 pandas>=2.0.0
@@ -19,4 +25,5 @@ tenacity
 
 # LLM packages
 tiktoken
+tortoise-orm
 xlsxwriter>=3.1.0
